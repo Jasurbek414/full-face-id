@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>WorkTrack Pro</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>WorkTrack Pro</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+
+	<!-- Camera permission -->
+	<key>NSCameraUsageDescription</key>
+	<string>WorkTrack Pro uses the camera to capture your face for secure attendance check-in using Face ID recognition.</string>
+
+	<!-- Photo library (image picker) -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>WorkTrack Pro may access your photo library to select a profile picture or upload a face photo for Face ID setup.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>WorkTrack Pro saves captured images for Face ID registration.</string>
+
+	<!-- Location permission (for GPS check-in) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>WorkTrack Pro uses your location to verify you are at the workplace when checking in.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>WorkTrack Pro uses your location for workplace attendance verification.</string>
+
+	<!-- Face ID / Touch ID biometrics -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>WorkTrack Pro uses Face ID for quick and secure authentication.</string>
+
+	<!-- Microphone (required by camera package) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WorkTrack Pro requires microphone access for camera functionality.</string>
+
+	<!-- Network security: allow HTTP for local dev -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>10.0.2.2</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>192.168.0.0</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+
+	<!-- Flutter -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+</dict>
+</plist>

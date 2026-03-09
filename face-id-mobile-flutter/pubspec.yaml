@@ -1,0 +1,76 @@
+name: face_id_mobile
+description: WorkTrack Pro - Employee Attendance & Face-ID Mobile App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP & Networking
+  dio: ^5.4.0
+  http: ^1.2.0
+
+  # State management
+  provider: ^6.1.2
+
+  # Local storage
+  shared_preferences: ^2.2.3
+  flutter_secure_storage: ^9.0.0
+
+  # Navigation
+  go_router: ^13.2.0
+
+  # UI
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+
+  # Camera & Face ID
+  camera: ^0.10.5+9
+  image: ^4.1.7
+
+  # Charts
+  fl_chart: ^0.67.0
+
+  # Date & Time
+  intl: ^0.19.0
+
+  # Biometrics
+  local_auth: ^2.1.8
+
+  # Notifications (optional)
+  flutter_local_notifications: ^17.1.2
+
+  # Connectivity
+  connectivity_plus: ^6.0.3
+
+  # Image picker
+  image_picker: ^1.0.7
+
+  # QR code scanning (for QR check-in)
+  mobile_scanner: ^4.0.1
+
+  # Geolocator (for GPS check-in)
+  geolocator: ^11.0.0
+
+  # Lottie animations
+  lottie: ^3.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+  # Fonts are loaded via the google_fonts package (cached automatically).
+  # No local font files required.

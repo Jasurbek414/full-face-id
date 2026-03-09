@@ -1,0 +1,72 @@
+# ── Python / Django ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.sqlite3
+.env
+*.pem
+private.pem
+public.pem
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Django
+staticfiles/
+media/
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+dist/
+.cache/
+*.local
+
+# ── Test / Debug artifacts ────────────────────────────────────────────────────
+*.txt
+!requirements.txt
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+check_*.py
+debug_*.py
+verify_*.py
+read_test.py
+list_urls.py
+format_keys.py
+gen_keys.py
+create_su.py
+conftest.py
+pytest.ini
+test_*.py
+*.docx
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Docker volumes (generated) ────────────────────────────────────────────────
+postgres_data/
+redis_data/
+minio_data/
+
+# ── Mobile (not included in this repo) ───────────────────────────────────────
+worktrackpro_mobile/

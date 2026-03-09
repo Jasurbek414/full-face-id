@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+private.pem
+public.pem
+staticfiles/
+media/
+celerybeat-schedule*
+db.sqlite3
+*.log

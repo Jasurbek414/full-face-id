@@ -1,0 +1,272 @@
+[
+    {
+        "model": "roles.permission",
+        "pk": 1,
+        "fields": {
+            "code": "attendance.view_own",
+            "name": "View Own Attendance",
+            "module": "Attendance"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 2,
+        "fields": {
+            "code": "attendance.view_dept",
+            "name": "View Department Attendance",
+            "module": "Attendance"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 3,
+        "fields": {
+            "code": "attendance.view_all",
+            "name": "View All Attendance",
+            "module": "Attendance"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 4,
+        "fields": {
+            "code": "attendance.manual_edit",
+            "name": "Manual Attendance Edit",
+            "module": "Attendance"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 5,
+        "fields": {
+            "code": "attendance.export",
+            "name": "Export Attendance",
+            "module": "Attendance"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 6,
+        "fields": {
+            "code": "attendance.live_view",
+            "name": "Live Monitoring View",
+            "module": "Attendance"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 7,
+        "fields": {
+            "code": "employees.view",
+            "name": "View Employees",
+            "module": "Employees"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 8,
+        "fields": {
+            "code": "employees.create",
+            "name": "Create Employees",
+            "module": "Employees"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 9,
+        "fields": {
+            "code": "employees.edit",
+            "name": "Edit Employees",
+            "module": "Employees"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 10,
+        "fields": {
+            "code": "employees.delete",
+            "name": "Delete Employees",
+            "module": "Employees"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 11,
+        "fields": {
+            "code": "employees.assign_role",
+            "name": "Assign Roles",
+            "module": "Employees"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 12,
+        "fields": {
+            "code": "employees.view_salary",
+            "name": "View Salary Info",
+            "module": "Employees"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 13,
+        "fields": {
+            "code": "payroll.view_own",
+            "name": "View Own Payroll",
+            "module": "Payroll"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 14,
+        "fields": {
+            "code": "payroll.view_all",
+            "name": "View All Payroll",
+            "module": "Payroll"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 15,
+        "fields": {
+            "code": "payroll.calculate",
+            "name": "Calculate Payroll",
+            "module": "Payroll"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 16,
+        "fields": {
+            "code": "payroll.approve",
+            "name": "Approve Payroll",
+            "module": "Payroll"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 17,
+        "fields": {
+            "code": "payroll.export",
+            "name": "Export Payroll Records",
+            "module": "Payroll"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 18,
+        "fields": {
+            "code": "reports.daily",
+            "name": "Daily Reports",
+            "module": "Reports"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 19,
+        "fields": {
+            "code": "reports.monthly",
+            "name": "Monthly Reports",
+            "module": "Reports"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 20,
+        "fields": {
+            "code": "reports.analytics",
+            "name": "Analytics Reports",
+            "module": "Reports"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 21,
+        "fields": {
+            "code": "leaves.request",
+            "name": "Request Leaves",
+            "module": "Leaves"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 22,
+        "fields": {
+            "code": "leaves.approve_dept",
+            "name": "Approve Dept Leaves",
+            "module": "Leaves"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 23,
+        "fields": {
+            "code": "leaves.approve_all",
+            "name": "Approve All Leaves",
+            "module": "Leaves"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 24,
+        "fields": {
+            "code": "devices.view",
+            "name": "View Devices",
+            "module": "Devices"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 25,
+        "fields": {
+            "code": "devices.manage",
+            "name": "Manage Devices",
+            "module": "Devices"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 26,
+        "fields": {
+            "code": "devices.sync",
+            "name": "Sync Devices",
+            "module": "Devices"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 27,
+        "fields": {
+            "code": "departments.manage",
+            "name": "Manage Departments",
+            "module": "Departments"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 28,
+        "fields": {
+            "code": "settings.company",
+            "name": "Company Settings",
+            "module": "Settings"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 29,
+        "fields": {
+            "code": "settings.roles",
+            "name": "Roles Settings",
+            "module": "Settings"
+        }
+    },
+    {
+        "model": "roles.permission",
+        "pk": 30,
+        "fields": {
+            "code": "settings.billing",
+            "name": "Billing Settings",
+            "module": "Settings"
+        }
+    }
+]
