@@ -48,12 +48,15 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         instance.approved_by = request.user
         instance.save()
         
-        from apps.notifications.tasks import send_push_notification
-        send_push_notification.delay(
-            instance.user.id,
-            "Leave Request Approved",
-            f"Your leave request for {instance.start_date} to {instance.end_date} has been approved."
-        )
+        try:
+            from apps.notifications.tasks import send_push_notification
+            send_push_notification.delay(
+                instance.user.id,
+                "Leave Request Approved",
+                f"Your leave request for {instance.start_date} to {instance.end_date} has been approved."
+            )
+        except Exception:
+            pass
         return Response({'status': 'approved'})
 
     @action(detail=True, methods=['post'])
@@ -65,12 +68,15 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         instance.approved_by = request.user
         instance.save()
         
-        from apps.notifications.tasks import send_push_notification
-        send_push_notification.delay(
-            instance.user.id,
-            "Leave Request Rejected",
-            f"Your leave request for {instance.start_date} to {instance.end_date} has been rejected."
-        )
+        try:
+            from apps.notifications.tasks import send_push_notification
+            send_push_notification.delay(
+                instance.user.id,
+                "Leave Request Rejected",
+                f"Your leave request for {instance.start_date} to {instance.end_date} has been rejected."
+            )
+        except Exception:
+            pass
         return Response({'status': 'rejected'})
 
     @action(detail=False, methods=['get'])

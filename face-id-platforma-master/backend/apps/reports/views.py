@@ -20,7 +20,10 @@ class ReportViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def _get_company_users(self, request):
-        qs = User.objects.filter(company=request.user.company, is_active=True)
+        company = getattr(request.user, 'company', None)
+        if not company:
+            return User.objects.none()
+        qs = User.objects.filter(company=company, is_active=True)
         department = request.query_params.get('department')
         user_id = request.query_params.get('user_id')
         if department:
@@ -139,16 +142,20 @@ class ReportViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
+        company = getattr(request.user, 'company', None)
+        if not company:
+            return Response({'total_employees': 0, 'present': 0, 'absent': 0, 'late': 0, 'on_time': 0, 'average_attendance_rate': 0.0})
+
         date_from_str = request.query_params.get('date_from')
         date_to_str = request.query_params.get('date_to')
-        
+
         today = datetime.now().date()
         date_from = parse_date(date_from_str) if date_from_str else today
         date_to = parse_date(date_to_str) if date_to_str else today
-        
-        users_count = User.objects.filter(company=request.user.company, is_active=True).count()
+
+        users_count = User.objects.filter(company=company, is_active=True).count()
         records = AttendanceRecord.objects.filter(
-           company=request.user.company, 
+           company=company,
            date__gte=date_from, 
            date__lte=date_to,
            is_deleted=False
@@ -173,6 +180,36 @@ class ReportViewSet(viewsets.ViewSet):
             'average_attendance_rate': rate
         }
         return Response(SummaryReportSerializer(data).data)
+
+    @action(detail=False, methods=['get'])
+    def weekly(self, request):
+        from datetime import timedelta
+        today = datetime.now().date()
+        start = today - timedelta(days=6)
+
+        users = self._get_company_users(request)
+        records = AttendanceRecord.objects.filter(
+            company=request.user.company,
+            date__gte=start,
+            date__lte=today,
+            is_deleted=False
+        )
+
+        data = []
+        for single_date in (start + timedelta(n) for n in range(7)):
+            day_records = records.filter(date=single_date)
+            present = day_records.filter(status__in=['on_time', 'late', 'early_leave']).count()
+            late = day_records.filter(status='late').count()
+            absent = day_records.filter(status='absent').count()
+            data.append({
+                'date': single_date.strftime('%Y-%m-%d'),
+                'day': single_date.strftime('%a'),
+                'present': present,
+                'late': late,
+                'absent': absent,
+            })
+
+        return Response(data)
 
     @action(detail=False, methods=['get'], url_path='late-analysis')
     def late_analysis(self, request):

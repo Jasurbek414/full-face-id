@@ -15,7 +15,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     serializer_class = AttendanceRecordSerializer
 
     def get_queryset(self):
-        qs = self.queryset.filter(company=self.request.user.company)
+        company = getattr(self.request.user, 'company', None)
+        if not company:
+            return self.queryset.none()
+        qs = self.queryset.filter(company=company)
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
         status_filter = self.request.query_params.get('status')
@@ -71,11 +74,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass  # Celery may not be running in dev
 
-        return Response({
-            'status': record.status, 
-            'check_in': record.check_in, 
-            'message': 'Checked in successfully'
-        }, status=status.HTTP_201_CREATED)
+        serializer = AttendanceRecordSerializer(record)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='check-out')
     def check_out(self, request):
@@ -99,11 +99,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         record.net_seconds = net_sec
         record.save()
         
-        return Response({
-            'check_out': record.check_out,
-            'net_seconds': record.net_seconds,
-            'message': 'Checked out successfully'
-        })
+        serializer = AttendanceRecordSerializer(record)
+        return Response(serializer.data)
         
     @action(detail=False, methods=['post'], url_path='break/start')
     def break_start(self, request):

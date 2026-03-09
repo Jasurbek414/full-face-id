@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // SA client needs base URL without /api/v1 prefix (SA routes are at /_sa/api/)
-const _apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const _apiUrl = import.meta.env.VITE_API_URL || '';
 const BASE_URL = _apiUrl.replace(/\/api\/v\d+\/?$/, '');
 
 export const saClient = axios.create({

@@ -11,7 +11,7 @@ export interface Notification {
 
 export const notificationsAPI = {
     list: () => apiClient.get<Notification[]>('/api/v1/notifications/'),
-    read: (id: string) => apiClient.patch(`/api/v1/notifications/${id}/`, { is_read: true }),
-    readAll: () => apiClient.post('/api/v1/notifications/read_all/'),
-    getUnreadCount: () => apiClient.get<{ count: number }>('/api/v1/notifications/unread_count/'),
+    read: (id: string) => apiClient.post(`/api/v1/notifications/${id}/read/`),
+    readAll: () => apiClient.post('/api/v1/notifications/read-all/'),
+    getUnreadCount: () => apiClient.get<{ unread_count: number }>('/api/v1/notifications/unread-count/'),
 };

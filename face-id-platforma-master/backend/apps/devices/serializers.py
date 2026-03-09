@@ -27,5 +27,8 @@ class DeviceCreateSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        company = self.context['request'].user.company
+        company = getattr(self.context['request'].user, 'company', None)
+        if not company:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Kompaniyangiz yo'q.")
         return Device.objects.create(company=company, **validated_data)

@@ -1,6 +1,7 @@
 import { createBrowserRouter, redirect } from "react-router";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Layout } from "./components/Layout";
+import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -21,7 +22,7 @@ import { UsersPage } from "./pages/UsersPage";
 export const router = createBrowserRouter([
   {
     path: "/",
-    loader: () => redirect("/login"),
+    Component: LandingPage,
   },
   {
     path: "/login",

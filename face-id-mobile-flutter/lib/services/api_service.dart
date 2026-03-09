@@ -59,7 +59,7 @@ class ApiService {
       final refresh = await _storage.read(key: 'refresh_token');
       if (refresh == null) return false;
       final response = await Dio().post(
-        '$_baseUrl/api/v1/auth/token/refresh/',
+        '$_baseUrl/api/v1/auth/refresh/',
         data: {'refresh': refresh},
       );
       await _storage.write(key: 'access_token', value: response.data['access']);
@@ -249,11 +249,11 @@ class ApiService {
   // ── Leaves ────────────────────────────────────────────────────────────────
 
   Future<Response> getLeaves({int page = 1}) {
-    return _dio.get('/api/v1/leaves/', queryParameters: {'page': page});
+    return _dio.get('/api/v1/leaves/requests/', queryParameters: {'page': page});
   }
 
   Future<Response> createLeaveRequest(Map<String, dynamic> data) {
-    return _dio.post('/api/v1/leaves/', data: data);
+    return _dio.post('/api/v1/leaves/requests/', data: data);
   }
 
   // ── Payroll ───────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ class ApiService {
   }
 
   Future<Response> markNotificationRead(String id) {
-    return _dio.patch('/api/v1/notifications/$id/', data: {'is_read': true});
+    return _dio.post('/api/v1/notifications/$id/read/');
   }
 
   // ── Devices ───────────────────────────────────────────────────────────────

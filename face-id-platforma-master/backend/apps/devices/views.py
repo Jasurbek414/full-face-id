@@ -20,11 +20,21 @@ class DeviceViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        qs = Device.objects.filter(company=self.request.user.company)
+        company = getattr(self.request.user, 'company', None)
+        if not company:
+            return Device.objects.none()
+        qs = Device.objects.filter(company=company)
         device_type = self.request.query_params.get('device_type')
         if device_type:
             qs = qs.filter(device_type=device_type)
         return qs
+
+    def perform_create(self, serializer):
+        company = getattr(self.request.user, 'company', None)
+        if not company:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Kompaniyangiz yo'q.")
+        serializer.save(company=company)
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

@@ -42,15 +42,22 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 def trigger_checkin_websocket(user, status, check_in_time):
-    channel_layer = get_channel_layer()
-    if channel_layer:
-        async_to_sync(channel_layer.group_send)(
-            f"company_{user.company_id}",
-            {
-                "type": "attendance_checkin",
-                "user_id": str(user.id),
-                "user_name": user.get_full_name(),
-                "status": status,
-                "time": check_in_time.isoformat(),
-            }
-        )
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"attendance_{user.company_id}",
+                {
+                    "type": "attendance_update",
+                    "data": {
+                        "user_id": str(user.id),
+                        "user_name": user.get_full_name() or str(user.phone),
+                        "user_photo": None,
+                        "status": status,
+                        "check_in": check_in_time.isoformat(),
+                        "check_in_method": "manual",
+                    }
+                }
+            )
+    except Exception:
+        pass  # Redis may not be running in dev

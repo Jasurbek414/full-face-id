@@ -107,7 +107,7 @@ if os.getenv('DB_NAME'):
             'PASSWORD': os.getenv('DB_PASSWORD'),
             'HOST': os.getenv('DB_HOST', 'db'),
             'PORT': os.getenv('DB_PORT', '5432'),
-            'CONN_MAX_AGE': 60,
+            'CONN_MAX_AGE': 0,
             'OPTIONS': {'options': '-c timezone=Asia/Tashkent'},
         }
     }
@@ -135,6 +135,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True

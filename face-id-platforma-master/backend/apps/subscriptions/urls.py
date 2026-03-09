@@ -24,9 +24,18 @@ class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if hasattr(self.request, 'company') and self.request.company:
-            return Subscription.objects.filter(company=self.request.company, is_deleted=False)
+        company = getattr(self.request.user, 'company', None)
+        if company:
+            return Subscription.objects.filter(company=company, is_deleted=False)
         return Subscription.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        """Return current company subscription as single object (not list)."""
+        qs = self.get_queryset()
+        instance = qs.order_by('-created_at').first()
+        if instance:
+            return Response(self.get_serializer(instance).data)
+        return Response({'detail': 'No active subscription'}, status=404)
 
 router = DefaultRouter()
 router.register('plans', PlanViewSet, basename='plan')

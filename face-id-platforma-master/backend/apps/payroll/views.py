@@ -11,17 +11,27 @@ class SalaryConfigViewSet(viewsets.ModelViewSet):
     serializer_class = SalaryConfigSerializer
 
     def get_queryset(self):
-        return SalaryConfig.objects.filter(company=self.request.user.company, is_deleted=False)
+        company = getattr(self.request.user, 'company', None)
+        if not company:
+            return SalaryConfig.objects.none()
+        return SalaryConfig.objects.filter(company=company, is_deleted=False)
 
     def perform_create(self, serializer):
-        serializer.save(company=self.request.user.company)
+        company = getattr(self.request.user, 'company', None)
+        if not company:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Kompaniyangiz yo'q.")
+        serializer.save(company=company)
 
 class PayrollViewSet(viewsets.ModelViewSet):
     serializer_class = PayrollRecordSerializer
 
     def get_queryset(self):
         user = self.request.user
-        qs = PayrollRecord.objects.filter(company=user.company, is_deleted=False)
+        company = getattr(user, 'company', None)
+        if not company:
+            return PayrollRecord.objects.none()
+        qs = PayrollRecord.objects.filter(company=company, is_deleted=False)
         if not user.is_staff:
             qs = qs.filter(user=user)
         return qs

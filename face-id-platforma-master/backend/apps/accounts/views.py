@@ -501,8 +501,11 @@ class CompanyUsersView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        company = getattr(request.user, 'company', None)
+        if not company:
+            return Response({'results': [], 'count': 0})
         users = User.objects.filter(
-            company=request.user.company,
+            company=company,
             is_active=True,
         ).select_related('role').order_by('first_name', 'last_name')
         data = []

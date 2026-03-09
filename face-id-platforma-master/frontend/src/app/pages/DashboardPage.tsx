@@ -366,7 +366,7 @@ export function DashboardPage() {
             { label: "Run Attendance Report", icon: "📊", to: "/app/reports", color: BRAND.primary },
             { label: "View Live Monitoring", icon: "📡", to: "/app/monitoring", color: BRAND.teal },
             { label: "Manage Cameras", icon: "📹", to: "/app/cameras", color: "#8E24AA" },
-            { label: "Employee Profiles", icon: "👥", to: "/app/employees/1", color: "#F57C00" },
+            { label: "Employee Profiles", icon: "👥", to: "/app/employees", color: "#F57C00" },
           ].map(({ label, icon, to, color }) => (
             <button
               key={label}

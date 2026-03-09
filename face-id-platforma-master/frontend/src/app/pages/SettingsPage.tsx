@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from "react";
 import {
   Building2, Clock, Bell, Lock, Save, Loader2, CheckCircle2,
-  User, Globe, Shield, ChevronRight,
+  User, Globe, Shield, ChevronRight, Sun, Moon, Palette,
 } from "lucide-react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../hooks/useAuth";
+import { useLanguage, Lang } from "../context/LanguageContext";
+import { useTheme } from "../context/ThemeContext";
 
 const BRAND = { primary: "#1A237E", accent: "#3949AB", teal: "#00897B", bg: "#F5F7FA" };
 
-type Section = "company" | "schedule" | "notifications" | "security";
+type Section = "profile" | "company" | "schedule" | "notifications" | "security" | "appearance";
 
 function SectionBtn({
   icon: Icon, label, active, onClick,
@@ -129,8 +131,17 @@ function SaveButton({ loading, saved, onClick }: { loading: boolean; saved: bool
 }
 
 export function SettingsPage() {
-  const { user } = useAuth();
-  const [section, setSection] = useState<Section>("company");
+  const { user, setUser } = useAuth();
+  const { lang, setLang, t } = useLanguage();
+  const { isDark, toggleTheme } = useTheme();
+  const [section, setSection] = useState<Section>("profile");
+
+  // Profile
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savedProfile, setSavedProfile] = useState(false);
 
   // Company settings
   const [companyName, setCompanyName] = useState("");
@@ -165,11 +176,34 @@ export function SettingsPage() {
   const [savedPw, setSavedPw] = useState(false);
 
   useEffect(() => {
+    if (user) {
+      setFirstName(user.first_name || "");
+      setLastName(user.last_name || "");
+      setPhone(user.phone || "");
+    }
     if (user?.company) {
       setCompanyName(user.company.name || "");
       setTimezone(user.company.timezone || "Asia/Tashkent");
     }
   }, [user]);
+
+  const saveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      const res = await apiClient.patch("/api/v1/auth/me/", {
+        first_name: firstName,
+        last_name: lastName,
+        phone,
+      });
+      setUser(res.data);
+      setSavedProfile(true);
+      setTimeout(() => setSavedProfile(false), 3000);
+    } catch {
+      alert("Saqlashda xatolik.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const weekDays = [
     { id: 1, label: "Du" },
@@ -263,6 +297,8 @@ export function SettingsPage() {
   };
 
   const sections = [
+    { id: "profile" as Section, icon: User, label: "Profil" },
+    { id: "appearance" as Section, icon: Palette, label: "Ko'rinish" },
     { id: "company" as Section, icon: Building2, label: "Kompaniya" },
     { id: "schedule" as Section, icon: Clock, label: "Ish jadvali" },
     { id: "notifications" as Section, icon: Bell, label: "Bildirishnomalar" },
@@ -294,6 +330,102 @@ export function SettingsPage() {
 
         {/* Content */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E8EAF0", padding: 28 }}>
+          {/* Profile */}
+          {section === "profile" && (
+            <div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Shaxsiy ma'lumotlar</div>
+                <div style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>Profil ma'lumotlaringizni tahrirlang</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 28, padding: "20px", background: "#F5F7FA", borderRadius: 12 }}>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.teal})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", fontWeight: 700, flexShrink: 0 }}>
+                  {(firstName || user?.first_name || "U")[0].toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{firstName || user?.first_name} {lastName || user?.last_name}</div>
+                  <div style={{ fontSize: 13, color: "#6B7280" }}>{user?.email}</div>
+                  <div style={{ fontSize: 12, color: BRAND.teal, marginTop: 4, fontWeight: 600 }}>{user?.role?.name || user?.system_role || "OWNER"}</div>
+                </div>
+              </div>
+              <FieldGroup>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <FieldRow label="Ism">
+                    <Input value={firstName} onChange={setFirstName} placeholder="Ism" />
+                  </FieldRow>
+                  <FieldRow label="Familiya">
+                    <Input value={lastName} onChange={setLastName} placeholder="Familiya" />
+                  </FieldRow>
+                </div>
+                <FieldRow label="Telefon raqam">
+                  <Input value={phone} onChange={setPhone} placeholder="+998901234567" />
+                </FieldRow>
+                <FieldRow label="Email" hint="O'zgartirish mumkin emas">
+                  <Input value={user?.email || ""} disabled />
+                </FieldRow>
+                <FieldRow label="Kompaniya ID" hint="O'zgartirish mumkin emas">
+                  <Input value={user?.company?.id || ""} disabled />
+                </FieldRow>
+              </FieldGroup>
+              <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
+                <SaveButton loading={savingProfile} saved={savedProfile} onClick={saveProfile} />
+              </div>
+            </div>
+          )}
+
+          {/* Appearance */}
+          {section === "appearance" && (
+            <div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Ko'rinish sozlamalari</div>
+                <div style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>Til va mavzu tanlamlari</div>
+              </div>
+              <FieldGroup>
+                <FieldRow label="Interfeys tili">
+                  <div style={{ display: "flex", gap: 12 }}>
+                    {([['uz', '🇺🇿', "O'zbek"], ['ru', '🇷🇺', 'Русский'], ['en', '🇬🇧', 'English']] as [Lang, string, string][]).map(([code, flag, label]) => (
+                      <button
+                        key={code}
+                        onClick={() => setLang(code)}
+                        style={{
+                          flex: 1, padding: "12px 16px", borderRadius: 10, border: `2px solid`,
+                          borderColor: lang === code ? BRAND.primary : "#E5E7EB",
+                          background: lang === code ? "#EEF0FB" : "#fff",
+                          color: lang === code ? BRAND.primary : "#374151",
+                          fontSize: 14, fontWeight: lang === code ? 700 : 400,
+                          cursor: "pointer", display: "flex", alignItems: "center", gap: 8, justifyContent: "center",
+                        }}
+                      >
+                        <span style={{ fontSize: 20 }}>{flag}</span>
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </FieldRow>
+                <FieldRow label="Mavzu">
+                  <div style={{ display: "flex", gap: 12 }}>
+                    {([['light', '☀️', "Yorug'"], ['dark', '🌙', 'Tungi']] as [string, string, string][]).map(([mode, icon, label]) => (
+                      <button
+                        key={mode}
+                        onClick={() => { if ((isDark ? 'dark' : 'light') !== mode) toggleTheme(); }}
+                        style={{
+                          flex: 1, padding: "16px", borderRadius: 10, border: `2px solid`,
+                          borderColor: (isDark ? 'dark' : 'light') === mode ? BRAND.primary : "#E5E7EB",
+                          background: (isDark ? 'dark' : 'light') === mode ? "#EEF0FB" : "#fff",
+                          color: (isDark ? 'dark' : 'light') === mode ? BRAND.primary : "#374151",
+                          fontSize: 14, fontWeight: (isDark ? 'dark' : 'light') === mode ? 700 : 400,
+                          cursor: "pointer", display: "flex", alignItems: "center", gap: 8, justifyContent: "center",
+                        }}
+                      >
+                        <span style={{ fontSize: 24 }}>{icon}</span>
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </FieldRow>
+              </FieldGroup>
+            </div>
+          )}
+
           {/* Company */}
           {section === "company" && (
             <div>
@@ -455,26 +587,6 @@ export function SettingsPage() {
                 <SaveButton loading={savingPw} saved={savedPw} onClick={changePassword} />
               </div>
 
-              {/* Profile info (read-only) */}
-              <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid #F3F4F6" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 16 }}>
-                  Profil ma'lumotlari
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  <FieldRow label="Ism">
-                    <Input value={user?.first_name || ""} disabled />
-                  </FieldRow>
-                  <FieldRow label="Familiya">
-                    <Input value={user?.last_name || ""} disabled />
-                  </FieldRow>
-                  <FieldRow label="Email">
-                    <Input value={user?.email || ""} disabled />
-                  </FieldRow>
-                  <FieldRow label="Telefon">
-                    <Input value={user?.phone || ""} disabled />
-                  </FieldRow>
-                </div>
-              </div>
             </div>
           )}
         </div>

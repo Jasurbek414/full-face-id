@@ -17,8 +17,11 @@ class CustomRoleViewSet(viewsets.ModelViewSet):
     required_permission = 'settings.roles'
 
     def get_queryset(self):
+        company = getattr(self.request.user, 'company', None)
+        if not company:
+            return CustomRole.objects.none()
         return CustomRole.objects.filter(
-            company=self.request.company,
+            company=company,
             is_deleted=False
         ).prefetch_related('permissions__permission')
 

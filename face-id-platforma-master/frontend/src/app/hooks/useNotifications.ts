@@ -13,8 +13,8 @@ export function useNotifications() {
                 notificationsAPI.list(),
                 notificationsAPI.getUnreadCount()
             ]);
-            setNotifications(notifsRes.data);
-            setUnreadCount(countRes.data.count);
+            setNotifications(notifsRes.data.results || notifsRes.data || []);
+            setUnreadCount(countRes.data.unread_count || 0);
         } catch (error) {
             console.error('Failed to fetch notifications:', error);
         } finally {

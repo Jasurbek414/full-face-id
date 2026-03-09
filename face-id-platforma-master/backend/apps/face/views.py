@@ -48,11 +48,11 @@ class FaceCheckInView(APIView):
             code = status.HTTP_403_FORBIDDEN if device is None and 'blocked' not in error else status.HTTP_401_UNAUTHORIZED
             if 'blocked' in error:
                 code = status.HTTP_403_FORBIDDEN
-            return Response({'error': error}, status=code)
+            return Response({'detail': error}, status=code)
 
         photo_b64 = request.data.get('photo', '')
         if not photo_b64:
-            return Response({'error': 'photo field required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'photo field required'}, status=status.HTTP_400_BAD_REQUEST)
 
         photo_hash = hash_image(photo_b64)
 
@@ -60,20 +60,20 @@ class FaceCheckInView(APIView):
         try:
             image_array = decode_base64_image(photo_b64)
         except Exception as e:
-            return Response({'error': f'Image decode error: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': f'Image decode error: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Extract face encodings
         try:
             encodings = get_face_encodings(image_array)
         except ImportError:
-            return Response({'error': 'face_recognition library not available'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'detail': 'face_recognition library not available'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if not encodings:
             FaceAttempt.objects.create(
                 device=device, user=None, company=device.company,
                 photo_hash=photo_hash, distance=1.0, success=False
             )
-            return Response({'error': 'No face found in photo'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'No face found in photo'}, status=status.HTTP_400_BAD_REQUEST)
 
         incoming = encodings[0]
 
@@ -92,7 +92,7 @@ class FaceCheckInView(APIView):
         )
 
         if matched_user is None:
-            return Response({'error': 'Face not recognized', 'distance': distance}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'detail': 'Face not recognized', 'distance': distance}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Create or update attendance record
         now = timezone.now()
@@ -151,7 +151,7 @@ class FaceCheckInView(APIView):
                 # No check-in record for today, create one with only check-out? 
                 # Usually we need a check-in. But if it's 'exit' only device, maybe they forgot.
                 # For now, let's assume they must have a record.
-                return Response({'error': 'No check-in record found to check-out'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'detail': 'No check-in record found to check-out'}, status=status.HTTP_400_BAD_REQUEST)
             
             if record.check_out:
                 return Response({
@@ -182,7 +182,7 @@ class SelfFaceEncodeView(APIView):
         from rest_framework.parsers import MultiPartParser, FormParser
         image_file = request.FILES.get('image')
         if not image_file:
-            return Response({'error': 'image field required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'image field required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             import numpy as np
@@ -193,12 +193,12 @@ class SelfFaceEncodeView(APIView):
             image_array = np.array(pil_img)
             encodings = get_face_encodings(image_array)
         except ImportError:
-            return Response({'error': 'face_recognition not installed on server'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'detail': 'face_recognition not installed on server'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         if not encodings:
-            return Response({'error': 'No face detected in image'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'No face detected in image'}, status=status.HTTP_400_BAD_REQUEST)
 
         fe, created = FaceEncoding.objects.get_or_create(
             user=request.user,
@@ -297,22 +297,22 @@ class EmployeeFaceView(APIView):
         try:
             employee = User.objects.get(pk=pk, company=request.user.company)
         except User.DoesNotExist:
-            return Response({'error': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
 
         photo_b64 = request.data.get('photo', '')
         if not photo_b64:
-            return Response({'error': 'photo required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'photo required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             image_array = decode_base64_image(photo_b64)
             encodings = get_face_encodings(image_array)
         except ImportError:
-            return Response({'error': 'face_recognition not installed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'detail': 'face_recognition not installed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         if not encodings:
-            return Response({'error': 'No face detected in photo'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'No face detected in photo'}, status=status.HTTP_400_BAD_REQUEST)
 
         fe, created = FaceEncoding.objects.get_or_create(
             user=employee, defaults={'company': request.user.company}
@@ -328,9 +328,9 @@ class EmployeeFaceView(APIView):
         try:
             employee = User.objects.get(pk=pk, company=request.user.company)
         except User.DoesNotExist:
-            return Response({'error': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
 
         deleted, _ = FaceEncoding.objects.filter(user=employee).delete()
         if deleted:
             return Response({'message': 'Face encoding deleted'})
-        return Response({'error': 'No face encoding found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'detail': 'No face encoding found'}, status=status.HTTP_404_NOT_FOUND)
