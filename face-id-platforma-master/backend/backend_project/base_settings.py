@@ -174,14 +174,6 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-# Channels
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {'hosts': [REDIS_URL]},
-    }
-}
-
 # JWT (Simple JWT)
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -227,14 +219,29 @@ REST_FRAMEWORK = {
 
 # Channels
 ASGI_APPLICATION = 'backend_project.asgi.application'
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [(os.getenv('REDIS_HOST', '127.0.0.1'), int(os.getenv('REDIS_PORT', 6379)))],
-        },
-    },
-}
+
+def _make_channel_layers():
+    """Use Redis if available, otherwise fall back to InMemoryChannelLayer."""
+    import socket
+    redis_host = os.getenv('REDIS_HOST', '127.0.0.1')
+    redis_port = int(os.getenv('REDIS_PORT', 6379))
+    try:
+        s = socket.create_connection((redis_host, redis_port), timeout=1)
+        s.close()
+        return {
+            'default': {
+                'BACKEND': 'channels_redis.core.RedisChannelLayer',
+                'CONFIG': {'hosts': [(redis_host, redis_port)]},
+            }
+        }
+    except OSError:
+        return {
+            'default': {
+                'BACKEND': 'channels.layers.InMemoryChannelLayer',
+            }
+        }
+
+CHANNEL_LAYERS = _make_channel_layers()
 
 # Email (SMTP) configuration
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')

@@ -337,9 +337,9 @@ function CompaniesPage({ companies, loading, onRefresh, onView, onBlock, onUnblo
                 <div style={{ fontSize: 12, color: C.muted }}>{c.email}</div>
               </div>,
               <StatusPill status={c.subscription_status || "NO_SUB"} />,
-              <span style={{ fontWeight: 600 }}>{c.employee_count ?? "—"}</span>,
+              <span style={{ fontWeight: 600 }}>{c.users_count ?? "—"}</span>,
               <span style={{ fontWeight: 600 }}>{c.device_count ?? "—"}</span>,
-              <span style={{ fontSize: 12, color: C.muted }}>{c.subscription_end ? new Date(c.subscription_end).toLocaleDateString("uz-UZ") : "—"}</span>,
+              <span style={{ fontSize: 12, color: C.muted }}>{c.subscription_expires_at ? new Date(c.subscription_expires_at).toLocaleDateString("uz-UZ") : "—"}</span>,
               <div style={{ display: "flex", gap: 6 }}>
                 <Btn small onClick={() => onView(c)}><Eye size={13} />Ko'rish</Btn>
                 {c.subscription_status === "BLOCKED" ? (
@@ -367,7 +367,7 @@ function EmployeesPage({ companies }: { companies: any[] }) {
         <p style={{ color: C.muted, margin: 0, fontSize: 14 }}>Barcha kompaniyalardagi xodimlar statistikasi</p>
       </div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-        <KPICard title="Jami xodimlar" value={companies.reduce((s, c) => s + (c.employee_count ?? 0), 0)} sub="Barcha kompaniyalarda" icon={<Users size={18} />} color="#4F6BDB" />
+        <KPICard title="Jami xodimlar" value={companies.reduce((s, c) => s + (c.users_count ?? 0), 0)} sub="Barcha kompaniyalarda" icon={<Users size={18} />} color="#4F6BDB" />
         <KPICard title="Faol kompaniyalar" value={companies.filter(c => c.subscription_status === "ACTIVE").length} sub="Xodim qo'sha oladigan" icon={<Building2 size={18} />} color="#10B981" />
       </div>
       <div style={{ marginBottom: 16 }}>
@@ -384,7 +384,7 @@ function EmployeesPage({ companies }: { companies: any[] }) {
                 <div style={{ fontSize: 12, color: C.muted }}>{c.email}</div>
               </div>,
               <StatusPill status={c.subscription_status || "NO_SUB"} />,
-              <span style={{ fontWeight: 700, fontSize: 16, color: C.accent }}>{c.employee_count ?? 0}</span>,
+              <span style={{ fontWeight: 700, fontSize: 16, color: C.accent }}>{c.users_count ?? 0}</span>,
               <span style={{ fontWeight: 600 }}>{c.device_count ?? 0}</span>,
             ])}
         />
@@ -425,7 +425,7 @@ function DevicesPage({ companies }: { companies: any[] }) {
             </div>,
             <StatusPill status={c.subscription_status || "NO_SUB"} />,
             <span style={{ fontWeight: 700, fontSize: 16, color: (c.device_count ?? 0) > 0 ? "#10B981" : C.muted }}>{c.device_count ?? 0}</span>,
-            <span style={{ fontWeight: 600 }}>{c.employee_count ?? 0}</span>,
+            <span style={{ fontWeight: 600 }}>{c.users_count ?? 0}</span>,
           ])}
         />
       </Card>
@@ -453,9 +453,23 @@ function PlansPage() {
   const save = async () => {
     setSaving(true);
     try {
-      await saAPI.createPlan({ name: form.name, price_monthly: parseFloat(form.price_monthly), max_employees: parseInt(form.max_employees), max_devices: parseInt(form.max_devices), trial_days: parseInt(form.trial_days) });
-      setShowCreate(false); setForm({ name: "", price_monthly: "", max_employees: "", max_devices: "", trial_days: "14" }); load();
-    } catch { }
+      await saAPI.createPlan({ 
+        name: form.name, 
+        price_per_month: parseFloat(form.price_monthly), 
+        max_employees: parseInt(form.max_employees), 
+        features: {
+          max_devices: parseInt(form.max_devices),
+          trial_days: parseInt(form.trial_days)
+        }
+      });
+      alert("Tarif muvaffaqiyatli yaratildi!");
+      setShowCreate(false); 
+      setForm({ name: "", price_monthly: "", max_employees: "", max_devices: "", trial_days: "14" }); 
+      load();
+    } catch (err: any) {
+      console.error("Create plan error:", err);
+      alert("Tarif yaratishda xatolik: " + (err.response?.data?.detail || JSON.stringify(err.response?.data) || "Nomalum xato"));
+    }
     setSaving(false);
   };
 
@@ -481,10 +495,12 @@ function PlansPage() {
               <div style={{ fontWeight: 800, fontSize: 17, color: C.text }}>{p.name}</div>
               <button onClick={() => del(p.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><X size={18} /></button>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: C.accent, marginBottom: 4 }}>${p.price_monthly}<span style={{ fontSize: 13, fontWeight: 500, color: C.muted }}>/oy</span></div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>Trial: {p.trial_days} kun</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: C.accent, marginBottom: 4 }}>
+              ${p.price_per_month || p.price_monthly}<span style={{ fontSize: 13, fontWeight: 500, color: C.muted }}>/oy</span>
+            </div>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>Trial: {p.features?.trial_days ?? 14} kun</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {[["Xodimlar", p.max_employees], ["Qurilmalar", p.max_devices]].map(([k, v]) => (
+              {[["Xodimlar", p.max_employees], ["Qurilmalar", p.features?.max_devices]].map(([k, v]) => (
                 <div key={String(k)} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                   <span style={{ color: C.muted }}>{k}</span>
                   <span style={{ fontWeight: 700, color: C.text }}>{v === -1 || v === null ? "Cheksiz" : v}</span>
@@ -595,6 +611,64 @@ function AuditPage() {
   );
 }
 
+// ─── History Tab ──────────────────────────────────────────────────────────────
+
+function HistoryTab({ companyId }: { companyId: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    saAPI.auditLog({ company_id: companyId })
+      .then(r => setLogs(r.data?.results ?? r.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [companyId]);
+
+  if (loading) return <div style={{ textAlign: "center", padding: 32, color: C.muted }}>Yuklanmoqda...</div>;
+
+  return (
+    <Table
+      headers={["Amal", "Admin", "Vaqt", "IP"]}
+      rows={logs.map(l => [
+        <span style={{ fontWeight: 600, color: C.accent }}>{l.action}</span>,
+        <span style={{ fontSize: 12 }}>{l.admin_name || l.admin_phone || "—"}</span>,
+        <span style={{ fontSize: 12, color: C.muted }}>{l.created_at ? new Date(l.created_at).toLocaleString("uz-UZ") : "—"}</span>,
+        <span style={{ fontSize: 11, fontFamily: "monospace", color: C.muted }}>{l.ip_address ?? "—"}</span>,
+      ])}
+      emptyMsg="Amallar tarixi mavjud emas"
+    />
+  );
+}
+
+// ─── Notes Tab ────────────────────────────────────────────────────────────────
+
+function NotesTab({ companyId, initialNotes }: { companyId: string; initialNotes: string }) {
+  const [notes, setNotes] = useState(initialNotes);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await saAPI.updateNotes(companyId, notes);
+      alert("Eslatmalar saqlandi!");
+    } catch {
+      alert("Saqlashda xatolik");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <textarea value={notes} onChange={e => setNotes(e.target.value)}
+        placeholder="Bu kompaniya haqida eslatmalar yozing..." rows={8}
+        style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box" }} />
+      <Btn style={{ marginTop: 12 }} onClick={save} disabled={saving}>
+        {saving ? "Saqlanmoqda..." : "Saqlash"}
+      </Btn>
+    </div>
+  );
+}
+
 // ─── Company Detail Modal ─────────────────────────────────────────────────────
 
 function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: () => void; onRefresh: () => void }) {
@@ -603,12 +677,15 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
   const [employees, setEmployees] = useState<any[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [plans, setPlans] = useState<any[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("");
   const [autoRenew, setAutoRenew] = useState(company.auto_renew ?? false);
   const [saving, setSaving] = useState(false);
   const [priceDays, setPriceDays] = useState("30");
+  const [paymentForm, setPaymentForm] = useState({ amount: "", days: "30", method: "manual", note: "" });
+  const [recordingPayment, setRecordingPayment] = useState(false);
 
   useEffect(() => {
     saAPI.getCompany(company.id).then(r => setDetails(r.data)).catch(() => {});
@@ -620,6 +697,7 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
     if (sub === "employees") saAPI.getCompanyEmployees(String(company.id)).then(r => setEmployees(r.data?.results ?? r.data ?? [])).catch(() => {});
     if (sub === "devices") saAPI.getCompanyDevices(String(company.id)).then(r => setDevices(r.data?.results ?? r.data ?? [])).catch(() => {});
     if (sub === "roles") saAPI.getCompanyRoles(String(company.id)).then(r => setRoles(r.data?.results ?? r.data ?? [])).catch(() => {});
+    if (sub === "payment") saAPI.getCompanyPayments(String(company.id)).then(r => setPayments(r.data?.results ?? r.data ?? [])).catch(() => {});
   }, [sub, company.id]);
 
   const doBlock = async () => {
@@ -632,8 +710,32 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
   const doAssignPlan = async () => {
     if (!selectedPlan) return;
     setSaving(true);
-    try { await saAPI.assignPlan(company.id, { plan_id: parseInt(selectedPlan), days: parseInt(priceDays) }); onRefresh(); } catch { }
+    try {
+      await saAPI.assignPlan(company.id, { plan_id: selectedPlan, days: parseInt(priceDays) });
+      alert("Tarif muvaffaqiyatli biriktirildi!");
+      onRefresh();
+    } catch (err: any) {
+      alert("Xatolik: " + (err.response?.data?.detail || "Tarifni biriktirib bo'lmadi"));
+    }
     setSaving(false);
+  };
+  const doRecordPayment = async () => {
+    if (!paymentForm.amount) return alert("Summani kiriting");
+    setRecordingPayment(true);
+    try {
+      await saAPI.recordPayment(String(company.id), {
+        amount: parseFloat(paymentForm.amount),
+        days: parseInt(paymentForm.days),
+        payment_method: paymentForm.method,
+        note: paymentForm.note
+      });
+      alert("To'lov muvaffaqiyatli saqlandi va obuna uzaytirildi!");
+      setPaymentForm({ amount: "", days: "30", method: "manual", note: "" });
+      onRefresh();
+    } catch (err: any) {
+      alert("Xatolik: " + (err.response?.data?.detail || "To'lovni saqlab bo'lmadi"));
+    }
+    setRecordingPayment(false);
   };
   const doToggleAutoRenew = async () => {
     try { await saAPI.toggleAutoRenew(String(company.id)); setAutoRenew((v: boolean) => !v); } catch { }
@@ -668,7 +770,7 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
             {[
               ["Nomi", company.name], ["Email", company.email], ["Telefon", company.phone ?? "—"],
-              ["Holat", null], ["Xodimlar", company.employee_count ?? "—"], ["Qurilmalar", company.device_count ?? "—"],
+              ["Holat", null], ["Xodimlar", company.users_count ?? "—"], ["Qurilmalar", company.device_count ?? "—"],
             ].map(([k, v], i) => (
               <div key={i} style={{ background: C.bg, borderRadius: 12, padding: 14 }}>
                 <div style={{ fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 4 }}>{k}</div>
@@ -721,9 +823,9 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
         <div>
           <div style={{ background: C.bg, borderRadius: 12, padding: 16, marginBottom: 20 }}>
             <div style={{ fontWeight: 700, color: C.text, marginBottom: 8 }}>Joriy tarif</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: C.accent }}>{company.current_plan ?? "Tarif yo'q"}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.accent }}>{company.plan_name ?? company.plan_type ?? "Tarif yo'q"}</div>
             <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-              Muddat: {company.subscription_end ? new Date(company.subscription_end).toLocaleDateString("uz-UZ") : "—"}
+              Muddat: {company.subscription_expires_at ? new Date(company.subscription_expires_at).toLocaleDateString("uz-UZ") : "—"}
             </div>
           </div>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Yangi tarif belgilash</div>
@@ -732,7 +834,7 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
               <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: "block", marginBottom: 6 }}>Tarif</label>
               <select value={selectedPlan} onChange={e => setSelectedPlan(e.target.value)} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 13, minWidth: 180 }}>
                 <option value="">Tanlang...</option>
-                {plans.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price_monthly}/oy)</option>)}
+                {plans.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price_per_month}/oy)</option>)}
               </select>
             </div>
             <div>
@@ -746,9 +848,53 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
 
       {/* Payment tab */}
       {sub === "payment" && (
-        <div style={{ color: C.muted, textAlign: "center", padding: 32 }}>
-          <CreditCard size={32} style={{ marginBottom: 8 }} />
-          <div>To'lovlar tarixi bu yerda ko'rinadi (API mavjud bo'lganda)</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ background: "#F9FAFB", padding: 16, borderRadius: 12, border: `1px solid ${C.border}` }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16, color: C.text, display: "flex", alignItems: "center", gap: 8 }}>
+              <CreditCard size={16} /> Yangi to'lovni qayd etish
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 4 }}>SUMMA ($)</label>
+                <Input value={paymentForm.amount} onChange={v => setPaymentForm(p => ({ ...p, amount: v }))} placeholder="0.00" style={{ width: "100%" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 4 }}>KUNLAR (MUDDAT)</label>
+                <Input value={paymentForm.days} onChange={v => setPaymentForm(p => ({ ...p, days: v }))} placeholder="30" style={{ width: "100%" }} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 4 }}>TO'LOV USULI</label>
+              <select value={paymentForm.method} onChange={e => setPaymentForm(p => ({ ...p, method: e.target.value }))}
+                style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 13 }}>
+                <option value="manual">Naqd / Pul o'tkazmasi</option>
+                <option value="card">Karta orqali</option>
+                <option value="click">Click / Payme</option>
+                <option value="other">Boshqa</option>
+              </select>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, display: "block", marginBottom: 4 }}>IZOH (Ixtiyoriy)</label>
+              <Input value={paymentForm.note} onChange={v => setPaymentForm(p => ({ ...p, note: v }))} placeholder="To'lov haqida qo'shimcha ma'lumot..." style={{ width: "100%" }} />
+            </div>
+            <Btn onClick={doRecordPayment} disabled={recordingPayment} style={{ width: "100%", justifyContent: "center" }}>
+              {recordingPayment ? "Saqlanmoqda..." : "To'lovni tasdiqlash"}
+            </Btn>
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>So'nggi to'lovlar</div>
+            <Table
+              headers={["Sana", "Summa", "Usul", "ID"]}
+              rows={payments.map(p => [
+                <span style={{ fontSize: 12 }}>{new Date(p.payment_date || p.created_at).toLocaleDateString("uz-UZ")}</span>,
+                <span style={{ fontWeight: 700, color: "#10B981" }}>${p.amount}</span>,
+                <span style={{ fontSize: 12 }}>{p.payment_method}</span>,
+                <span style={{ fontSize: 11, color: C.muted, fontFamily: "monospace" }}>{p.transaction_id || p.id}</span>
+              ])}
+              emptyMsg="To'lovlar tarixi mavjud emas"
+            />
+          </div>
         </div>
       )}
 
@@ -785,26 +931,19 @@ function CompanyModal({ company, onClose, onRefresh }: { company: any; onClose: 
           rows={roles.map(r => [
             <span style={{ fontWeight: 600 }}>{r.name}</span>,
             <span style={{ color: C.accent, fontWeight: 700 }}>{r.permissions?.length ?? 0}</span>,
-            <span>{r.employee_count ?? "—"}</span>,
+            <span>{r.users_count ?? "—"}</span>,
           ])}
         />
       )}
 
       {/* History tab */}
       {sub === "history" && (
-        <div style={{ color: C.muted, textAlign: "center", padding: 32 }}>
-          <Activity size={32} style={{ marginBottom: 8 }} />
-          <div>Kompaniya amallar tarixi (audit log filtrlanadi)</div>
-        </div>
+        <HistoryTab companyId={company.id} />
       )}
 
       {/* Notes tab */}
       {sub === "notes" && (
-        <div>
-          <textarea placeholder="Bu kompaniya haqida eslatmalar yozing..." rows={8}
-            style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
-          <Btn style={{ marginTop: 12 }}>Saqlash</Btn>
-        </div>
+        <NotesTab companyId={company.id} initialNotes={company.notes ?? ""} />
       )}
     </Modal>
   );

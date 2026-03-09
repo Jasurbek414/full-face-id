@@ -13,10 +13,12 @@ class SACompanySerializer(serializers.ModelSerializer):
     """Extended serializer for the SuperAdmin panel, includes subscription info."""
     is_blocked = serializers.SerializerMethodField()
     plan_type = serializers.SerializerMethodField()
+    plan_name = serializers.SerializerMethodField()
     subscription_status = serializers.SerializerMethodField()
     subscription_expires_at = serializers.SerializerMethodField()
     monthly_price = serializers.SerializerMethodField()
     users_count = serializers.SerializerMethodField()
+    device_count = serializers.SerializerMethodField()
     subscription_id = serializers.SerializerMethodField()
     grace_period_days = serializers.SerializerMethodField()
     notes = serializers.SerializerMethodField()
@@ -25,8 +27,8 @@ class SACompanySerializer(serializers.ModelSerializer):
         model = Company
         fields = (
             'id', 'name', 'timezone', 'is_active', 'created_at', 'updated_at',
-            'is_blocked', 'plan_type', 'subscription_status', 'subscription_expires_at',
-            'monthly_price', 'users_count', 'subscription_id', 'grace_period_days', 'notes',
+            'is_blocked', 'plan_type', 'plan_name', 'subscription_status', 'subscription_expires_at',
+            'monthly_price', 'users_count', 'device_count', 'subscription_id', 'grace_period_days', 'notes',
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
 
@@ -43,6 +45,12 @@ class SACompanySerializer(serializers.ModelSerializer):
         if sub.plan:
             return sub.plan.name.upper()
         return sub.status
+
+    def get_plan_name(self, obj):
+        sub = self._get_sub(obj)
+        if sub and sub.plan:
+            return sub.plan.name
+        return None
 
     def get_subscription_status(self, obj):
         sub = self._get_sub(obj)
@@ -62,6 +70,10 @@ class SACompanySerializer(serializers.ModelSerializer):
 
     def get_users_count(self, obj):
         return obj.users.filter(is_active=True).count()
+
+    def get_device_count(self, obj):
+        from apps.devices.models import Device
+        return Device.objects.filter(company=obj).count()
 
     def get_subscription_id(self, obj):
         sub = self._get_sub(obj)

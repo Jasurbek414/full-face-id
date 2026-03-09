@@ -69,9 +69,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    document.body.style.backgroundColor = colors.bg;
-    document.body.style.color = colors.text;
-  }, [theme, colors.bg, colors.text]);
+    // Tailwind dark: variant needs .dark class on <html>
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme, isDark]);
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, isDark, colors }}>

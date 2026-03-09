@@ -5,8 +5,7 @@ import {
 } from "lucide-react";
 import { companyUsersAPI, rolesAPI } from "../api/devices";
 import { UserAvatar } from "../components/UserAvatar";
-
-const BRAND = { primary: "#1A237E", accent: "#3949AB", teal: "#00897B", bg: "#F5F7FA" };
+import { useLanguage } from "../context/LanguageContext";
 
 interface CompanyUser {
   id: string;
@@ -27,59 +26,18 @@ interface Role {
   is_system: boolean;
 }
 
-const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
-  OWNER: { bg: "#FEF3C7", color: "#D97706" },
-  ADMIN: { bg: "#EDE9FE", color: "#7C3AED" },
-  MANAGER: { bg: "#DBEAFE", color: "#1D4ED8" },
-  HR: { bg: "#D1FAE5", color: "#059669" },
-  ACCOUNTANT: { bg: "#FCE7F3", color: "#BE185D" },
-  EMPLOYEE: { bg: "#F3F4F6", color: "#374151" },
-  GUARD: { bg: "#FEE2E2", color: "#DC2626" },
+const ROLE_STYLES: Record<string, string> = {
+  OWNER: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800/50",
+  ADMIN: "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800/50",
+  MANAGER: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-800/50",
+  HR: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/50",
+  ACCOUNTANT: "bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 border-pink-100 dark:border-pink-800/50",
+  EMPLOYEE: "bg-slate-50 dark:bg-slate-900/20 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-800/50",
+  GUARD: "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-800/50",
 };
 
-function RoleBadge({ name }: { name: string }) {
-  const style = ROLE_COLORS[name] || { bg: "#F3F4F6", color: "#374151" };
-  return (
-    <span style={{
-      fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
-      background: style.bg, color: style.color,
-    }}>
-      {name}
-    </span>
-  );
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-      {children}
-    </label>
-  );
-}
-
-function StyledInput({
-  value, onChange, placeholder, type = "text",
-}: {
-  value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      style={{
-        width: "100%", boxSizing: "border-box", border: "1.5px solid #E5E7EB",
-        borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#111827",
-        outline: "none", backgroundColor: "#fff",
-      }}
-      onFocus={(e) => (e.target.style.borderColor = "#3949AB")}
-      onBlur={(e) => (e.target.style.borderColor = "#E5E7EB")}
-    />
-  );
-}
-
 export function UsersPage() {
+  const { t, lang } = useLanguage();
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
@@ -121,9 +79,9 @@ export function UsersPage() {
   const filtered = users.filter((u) => {
     const q = search.toLowerCase();
     return (
-      u.full_name.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q) ||
-      u.phone.includes(q)
+      (u.full_name || "").toLowerCase().includes(q) ||
+      (u.email || "").toLowerCase().includes(q) ||
+      (u.phone || "").includes(q)
     );
   });
 
@@ -142,8 +100,8 @@ export function UsersPage() {
   };
 
   const handleCreate = async () => {
-    if (!form.phone.trim()) { setFormError("Telefon raqam kiritilishi shart."); return; }
-    if (!form.password || form.password.length < 8) { setFormError("Parol kamida 8 ta belgi bo'lishi kerak."); return; }
+    if (!form.phone.trim()) { setFormError(t('enterPhone')); return; }
+    if (!form.password || form.password.length < 8) { setFormError(t('passwordMinLength')); return; }
     setSubmitting(true);
     setFormError("");
     try {
@@ -162,7 +120,7 @@ export function UsersPage() {
       setFormError(
         typeof d === "object"
           ? Object.values(d).flat().join(" ")
-          : "Xatolik yuz berdi."
+          : t('errorOccurred')
       );
     } finally {
       setSubmitting(false);
@@ -180,146 +138,148 @@ export function UsersPage() {
       fetchData();
       setTimeout(() => setSavedRole(false), 3000);
     } catch {
-      alert("Rolni saqlashda xatolik.");
+      alert(t('errorSavingRole'));
     } finally {
       setSavingRole(false);
     }
   };
 
   const handleDeactivate = async (user: CompanyUser) => {
-    if (!window.confirm(`${user.full_name} ni tizimdan o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.`)) return;
+    if (!window.confirm(`${user.full_name} ${t('teamConfirmDeactivate')}`)) return;
     try {
       await companyUsersAPI.deactivate(user.id);
       fetchData();
     } catch {
-      alert("Xatolik yuz berdi.");
+      alert(t('errorOccurred'));
     }
   };
 
-  const setField = (key: keyof typeof form) => (v: string) =>
-    setForm((f) => ({ ...f, [key]: v }));
+  const getRoleDesc = (name: string) => {
+    const map: Record<string, string> = {
+      OWNER: t('roleOwner'),
+      ADMIN: t('roleAdmin'),
+      MANAGER: t('roleManager'),
+      HR: t('roleHr'),
+      ACCOUNTANT: t('roleAccountant'),
+      EMPLOYEE: t('roleEmployee'),
+      GUARD: t('roleGuard'),
+    };
+    return map[name] || t('notAssigned');
+  };
 
   return (
-    <div style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Jamoa boshqaruvi</h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
-            Xodimlarni qo'shish, rollarini belgilash va boshqarish
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{t('teamManagement')}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('teamSubtitle')}</p>
         </div>
         <button
           onClick={openCreate}
-          style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "9px 18px", borderRadius: 8, border: "none",
-            background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-            color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-            boxShadow: "0 2px 8px rgba(26,35,126,0.25)",
-          }}
+          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all active:scale-95 group"
         >
-          <Plus size={15} />
-          Xodim qo'shish
+          <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300" />
+          {t('addEmployee')}
         </button>
       </div>
 
-      {/* Search */}
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 8, flex: 1, maxWidth: 360,
-          background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "8px 12px",
-        }}>
-          <Search size={15} color="#9CA3AF" />
+      {/* Search & Stats */}
+      <div className="flex flex-col md:flex-row md:items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
           <input
+            type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ism, email yoki telefon bo'yicha qidiring..."
-            style={{ border: "none", outline: "none", fontSize: 13, color: "#374151", flex: 1, background: "none" }}
+            placeholder={t('teamSearchPlaceholder')}
+            className="w-full pl-11 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
           />
         </div>
-        <div style={{ fontSize: 13, color: "#6B7280" }}>
-          Jami: <strong>{users.length}</strong> xodim
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-900/50 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 border border-slate-200/50 dark:border-slate-800/50">
+          <Users size={14} className="text-indigo-500" />
+          {t('totalCount')}: <span className="text-slate-900 dark:text-white ml-1">{users.length}</span>
         </div>
       </div>
 
-      {/* Users Table */}
-      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E8EAF0", overflow: "hidden" }}>
+      {/* Table Container */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden min-h-[400px]">
         {loading ? (
-          <div style={{ textAlign: "center", padding: 60, color: "#9CA3AF" }}>
-            <Loader2 size={28} style={{ animation: "spin 1s linear infinite" }} />
-            <div style={{ marginTop: 12, fontSize: 13 }}>Yuklanmoqda...</div>
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400 dark:text-slate-500">
+            <Loader2 size={32} className="animate-spin text-indigo-500" />
+            <span className="text-sm font-medium">{t('loading')}</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <Users size={40} color="#D1D5DB" />
-            <div style={{ marginTop: 14, fontSize: 14, fontWeight: 600, color: "#374151" }}>
-              {search ? "Qidiruv natijasi topilmadi" : "Hali xodim qo'shilmagan"}
+          <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-6">
+            <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900/50 rounded-3xl flex items-center justify-center text-slate-200 dark:text-slate-700">
+              <Users size={40} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">{search ? t('noData') : t('noData')}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-xs">{search ? t('tryFilters') : t('teamSubtitle')}</p>
             </div>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr style={{ background: BRAND.bg, borderBottom: "1px solid #E8EAF0" }}>
-                  {["Xodim", "Aloqa", "Rol", "Qo'shilgan sana", "Amallar"].map((h) => (
-                    <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6B7280" }}>
+                <tr className="bg-slate-50/50 dark:bg-slate-900/20">
+                  {[t('employee'), t('contact'), t('role'), t('dateJoined'), t('actions')].map((h) => (
+                    <th key={h} className="px-6 py-4 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {filtered.map((user, i) => (
-                  <tr
-                    key={user.id}
-                    style={{ borderBottom: "1px solid #F3F4F6", backgroundColor: i % 2 === 0 ? "#fff" : "#FAFAFA" }}
-                  >
-                    <td style={{ padding: "12px 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <UserAvatar src={user.photo || ""} name={user.full_name} size={36} />
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {filtered.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar src={u.photo || ""} name={u.full_name} size={40} />
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{user.full_name || "—"}</div>
-                          <div style={{ fontSize: 12, color: "#9CA3AF" }}>{user.phone}</div>
+                          <div className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-tight">{u.full_name || "—"}</div>
+                          <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500 tracking-wider">#{u.id.slice(-6)}</div>
                         </div>
                       </div>
                     </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <div style={{ fontSize: 13, color: "#374151" }}>{user.email || "—"}</div>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300 font-medium italic">
+                           <Mail size={12} className="text-slate-400" /> {u.email || "—"}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                           <Phone size={12} className="text-slate-400" /> {u.phone}
+                        </div>
+                      </div>
                     </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      {user.role ? <RoleBadge name={user.role.name} /> : (
-                        <span style={{ fontSize: 12, color: "#9CA3AF" }}>Belgilanmagan</span>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {u.role ? (
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border shadow-sm ${ROLE_STYLES[u.role.name] || ROLE_STYLES.EMPLOYEE}`}>
+                          {u.role.name}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold text-slate-300 dark:text-slate-600 italic uppercase">
+                          {t('notAssigned')}
+                        </span>
                       )}
                     </td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#6B7280" }}>
-                      {new Date(user.date_joined).toLocaleDateString("uz-UZ")}
+                    <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-500 dark:text-slate-400 italic">
+                      {new Date(u.date_joined).toLocaleDateString(lang === 'uz' ? 'uz-UZ' : lang === 'ru' ? 'ru-RU' : 'en-US')}
                     </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <div style={{ display: "flex", gap: 8 }}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={() => openEdit(user)}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 5,
-                            padding: "6px 12px", borderRadius: 6,
-                            border: `1.5px solid ${BRAND.accent}`,
-                            background: "#fff", color: BRAND.accent,
-                            fontSize: 12, fontWeight: 600, cursor: "pointer",
-                          }}
+                          onClick={() => openEdit(u)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-xs font-black uppercase tracking-tighter border border-indigo-100 dark:border-indigo-800/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-all active:scale-90"
                         >
-                          <Shield size={12} /> Rol
+                          <Shield size={12} /> {t('role')}
                         </button>
                         <button
-                          onClick={() => handleDeactivate(user)}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 5,
-                            padding: "6px 10px", borderRadius: 6,
-                            border: "1.5px solid #FECACA",
-                            background: "#fff", color: "#DC2626",
-                            fontSize: 12, cursor: "pointer",
-                          }}
+                          onClick={() => handleDeactivate(u)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all active:scale-90"
                         >
-                          <UserX size={12} />
+                          <UserX size={16} />
                         </button>
                       </div>
                     </td>
@@ -331,239 +291,202 @@ export function UsersPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal Container */}
       {showModal && (
-        <div
-          style={{
-            position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            zIndex: 1000, padding: 20,
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
-        >
-          <div style={{
-            background: "#fff", borderRadius: 16, width: "100%", maxWidth: 480,
-            maxHeight: "90vh", overflowY: "auto",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
-          }}>
-            {/* Modal header */}
-            <div style={{
-              padding: "18px 24px", borderBottom: "1px solid #E5E7EB",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              position: "sticky", top: 0, background: "#fff", zIndex: 1,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 8,
-                  background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.teal})`,
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  {editUser ? <Shield size={18} color="#fff" /> : <Plus size={18} color="#fff" />}
-                </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>
-                    {editUser ? `${editUser.full_name} — Rol belgilash` : "Yangi xodim qo'shish"}
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div 
+            className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-6 border-bottom border-slate-100 dark:border-slate-700/50 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20 flex-shrink-0">
+               <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${editUser ? 'bg-indigo-600 text-white shadow-indigo-500/20' : 'bg-emerald-600 text-white shadow-emerald-500/20'}`}>
+                    {editUser ? <Shield size={22} /> : <Plus size={22} />}
                   </div>
-                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                    {editUser ? "Rolni o'zgartiring" : "Xodim ma'lumotlarini kiriting"}
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                        {editUser ? t('assignRole') : t('addEmployee')}
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest leading-3">
+                        {editUser ? t('changeRole') : t('enterUserDetails')}
+                    </p>
                   </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}
-              >
-                <X size={20} />
-              </button>
+               </div>
+               <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all">
+                  <X size={20} />
+               </button>
             </div>
 
-            <div style={{ padding: 24 }}>
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6">
               {editUser ? (
-                /* Role edit mode */
-                <div>
-                  <div style={{ marginBottom: 20, padding: 16, background: BRAND.bg, borderRadius: 10, display: "flex", alignItems: "center", gap: 12 }}>
-                    <UserAvatar src={editUser.photo || ""} name={editUser.full_name} size={44} />
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{editUser.full_name}</div>
-                      <div style={{ fontSize: 13, color: "#6B7280" }}>{editUser.email || editUser.phone}</div>
-                      {editUser.role && <RoleBadge name={editUser.role.name} />}
+                /* Role Edit Mode */
+                <div className="space-y-6">
+                  <div className="p-4 bg-slate-100 dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 flex items-center gap-4">
+                    <UserAvatar src={editUser.photo || ""} name={editUser.full_name} size={56} />
+                    <div className="space-y-0.5">
+                      <div className="text-base font-black text-slate-900 dark:text-white uppercase">{editUser.full_name}</div>
+                      <div className="text-xs font-bold text-slate-500 tracking-wider uppercase italic">{editUser.phone}</div>
+                      {editUser.role && (
+                        <span className={`inline-block mt-2 px-2 py-0.5 rounded-lg text-[10px] font-black tracking-widest border shrink-0 ${ROLE_STYLES[editUser.role.name] || ROLE_STYLES.EMPLOYEE}`}>
+                           {editUser.role.name}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  <FieldLabel>Yangi rol tanlang</FieldLabel>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
-                    {roles.map((role) => {
-                      const style = ROLE_COLORS[role.name] || { bg: "#F3F4F6", color: "#374151" };
-                      const selected = editRoleId === role.id;
-                      return (
-                        <button
-                          key={role.id}
-                          onClick={() => setEditRoleId(role.id)}
-                          style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            padding: "12px 16px", borderRadius: 8, cursor: "pointer",
-                            border: selected ? `2px solid ${BRAND.primary}` : "1.5px solid #E5E7EB",
-                            background: selected ? "#EEF0FB" : "#fff",
-                            textAlign: "left",
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{
-                              width: 32, height: 32, borderRadius: 8,
-                              background: style.bg, display: "flex", alignItems: "center", justifyContent: "center",
-                            }}>
-                              <Shield size={16} color={style.color} />
+                  <div className="space-y-3">
+                    <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('selectNewRole')}</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {roles.map((role) => {
+                        const style = ROLE_STYLES[role.name] || ROLE_STYLES.EMPLOYEE;
+                        const isSelected = editRoleId === role.id;
+                        return (
+                          <button
+                            key={role.id}
+                            onClick={() => setEditRoleId(role.id)}
+                            className={`
+                              flex items-start gap-3 p-4 rounded-2xl border-2 transition-all text-left group
+                              ${isSelected 
+                                ? "bg-indigo-50/50 dark:bg-indigo-900/20 border-indigo-600 dark:border-indigo-500" 
+                                : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-800"}
+                            `}
+                          >
+                            <div className={`p-2 rounded-xl shrink-0 ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-50 dark:bg-slate-700 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 text-slate-400 group-hover:text-indigo-500'} transition-colors`}>
+                               <Shield size={16} />
                             </div>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: selected ? BRAND.primary : "#111827" }}>
-                                {role.name}
+                            <div className="space-y-1">
+                              <div className={`text-sm font-black uppercase tracking-tight ${isSelected ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-900 dark:text-white'}`}>
+                                 {role.name}
                               </div>
-                              <div style={{ fontSize: 11, color: "#9CA3AF" }}>
-                                {getRoleDescription(role.name)}
+                              <div className="text-[10px] font-bold text-slate-400 uppercase leading-3 italic">
+                                 {getRoleDesc(role.name)}
                               </div>
                             </div>
-                          </div>
-                          {selected && <CheckCircle2 size={18} color={BRAND.primary} />}
-                        </button>
-                      );
-                    })}
+                            {isSelected && <CheckCircle2 size={16} className="text-indigo-600 dark:text-indigo-500 ml-auto" />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {savedRole && (
-                    <div style={{
-                      padding: "10px 14px", borderRadius: 8, marginBottom: 16,
-                      background: "#F0FDF4", border: "1px solid #A7F3D0",
-                      color: "#059669", fontSize: 13, display: "flex", alignItems: "center", gap: 8,
-                    }}>
-                      <CheckCircle2 size={14} /> Rol muvaffaqiyatli saqlandi!
+                    <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50 flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-300">
+                      <CheckCircle2 size={20} className="text-emerald-500" />
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{t('roleSaved')}</span>
                     </div>
                   )}
-
-                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setShowModal(false)}
-                      style={{
-                        padding: "10px 20px", borderRadius: 8, border: "1.5px solid #E5E7EB",
-                        background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >
-                      Yopish
-                    </button>
-                    <button
-                      onClick={handleSaveRole}
-                      disabled={savingRole}
-                      style={{
-                        padding: "10px 24px", borderRadius: 8, border: "none",
-                        background: savingRole ? "#9CA3AF" : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-                        color: "#fff", fontSize: 13, fontWeight: 700,
-                        cursor: savingRole ? "not-allowed" : "pointer",
-                        display: "flex", alignItems: "center", gap: 8,
-                      }}
-                    >
-                      {savingRole && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
-                      Saqlash
-                    </button>
-                  </div>
                 </div>
               ) : (
-                /* Create user mode */
-                <div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-                    <div>
-                      <FieldLabel>Ism</FieldLabel>
-                      <StyledInput value={form.first_name} onChange={setField("first_name")} placeholder="Jasur" />
+                /* Create User Mode */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('firstName')}</label>
+                      <input 
+                         type="text" 
+                         value={form.first_name} 
+                         onChange={(e) => setForm(f => ({...f, first_name: e.target.value}))} 
+                         placeholder="Jasur" 
+                         className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all uppercase placeholder:normal-case italic" 
+                      />
                     </div>
-                    <div>
-                      <FieldLabel>Familiya</FieldLabel>
-                      <StyledInput value={form.last_name} onChange={setField("last_name")} placeholder="Karimov" />
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('lastName')}</label>
+                      <input 
+                         type="text" 
+                         value={form.last_name} 
+                         onChange={(e) => setForm(f => ({...f, last_name: e.target.value}))} 
+                         placeholder="Karimov" 
+                         className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all uppercase placeholder:normal-case italic" 
+                      />
                     </div>
                   </div>
-                  <div style={{ marginBottom: 14 }}>
-                    <FieldLabel>Telefon raqam *</FieldLabel>
-                    <StyledInput value={form.phone} onChange={setField("phone")} placeholder="998901234567" type="tel" />
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('phone')} *</label>
+                    <input 
+                       type="tel" 
+                       value={form.phone} 
+                       onChange={(e) => setForm(f => ({...f, phone: e.target.value}))} 
+                       placeholder="998901234567" 
+                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all italic tracking-widest" 
+                    />
                   </div>
-                  <div style={{ marginBottom: 14 }}>
-                    <FieldLabel>Email</FieldLabel>
-                    <StyledInput value={form.email} onChange={setField("email")} placeholder="jasur@gmail.com" type="email" />
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('email')}</label>
+                    <input 
+                       type="email" 
+                       value={form.email} 
+                       onChange={(e) => setForm(f => ({...f, email: e.target.value}))} 
+                       placeholder="jasur@gmail.com" 
+                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all italic" 
+                    />
                   </div>
-                  <div style={{ marginBottom: 14 }}>
-                    <FieldLabel>Parol *</FieldLabel>
-                    <StyledInput value={form.password} onChange={setField("password")} placeholder="Kamida 8 ta belgi" type="password" />
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('password')} *</label>
+                    <input 
+                       type="password" 
+                       value={form.password} 
+                       onChange={(e) => setForm(f => ({...f, password: e.target.value}))} 
+                       placeholder="••••••••" 
+                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all tracking-widest" 
+                    />
                   </div>
-                  <div style={{ marginBottom: 20 }}>
-                    <FieldLabel>Rol</FieldLabel>
-                    <select
-                      value={form.role_id}
-                      onChange={(e) => setField("role_id")(e.target.value)}
-                      style={{
-                        width: "100%", border: "1.5px solid #E5E7EB", borderRadius: 8,
-                        padding: "9px 12px", fontSize: 13, color: "#111827",
-                        outline: "none", backgroundColor: "#fff", cursor: "pointer",
-                      }}
-                    >
-                      <option value="">Rol tanlanmagan</option>
-                      {roles.map((r) => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('role')}</label>
+                    <div className="relative">
+                      <select
+                        value={form.role_id}
+                        onChange={(e) => setForm(f => ({...f, role_id: e.target.value}))}
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none cursor-pointer placeholder:italic"
+                      >
+                        <option value="">{t('notAssigned')}</option>
+                        {roles.map((r) => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
                   </div>
 
                   {formError && (
-                    <div style={{
-                      padding: "10px 14px", borderRadius: 8, marginBottom: 16,
-                      background: "#FEF2F2", border: "1px solid #FECACA",
-                      color: "#DC2626", fontSize: 13, display: "flex", alignItems: "center", gap: 8,
-                    }}>
-                      <AlertTriangle size={14} /> {formError}
+                    <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-100 dark:border-red-800/50 flex items-center gap-3 animate-in shake duration-300">
+                      <AlertTriangle size={18} className="text-red-500" />
+                      <span className="text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-tight">{formError}</span>
                     </div>
                   )}
-
-                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setShowModal(false)}
-                      style={{
-                        padding: "10px 20px", borderRadius: 8, border: "1.5px solid #E5E7EB",
-                        background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >
-                      Bekor qilish
-                    </button>
-                    <button
-                      onClick={handleCreate}
-                      disabled={submitting}
-                      style={{
-                        padding: "10px 24px", borderRadius: 8, border: "none",
-                        background: submitting ? "#9CA3AF" : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-                        color: "#fff", fontSize: 13, fontWeight: 700,
-                        cursor: submitting ? "not-allowed" : "pointer",
-                        display: "flex", alignItems: "center", gap: 8,
-                      }}
-                    >
-                      {submitting && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
-                      Qo'shish
-                    </button>
-                  </div>
                 </div>
               )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-5 bg-slate-50/50 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-700/50 flex flex-shrink-0 items-center justify-end gap-3">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-6 py-2.5 text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={editUser ? handleSaveRole : handleCreate}
+                disabled={submitting || savingRole}
+                className={`
+                  flex items-center gap-2 px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 disabled:opacity-50
+                  ${editUser ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/25' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25'}
+                `}
+              >
+                {(submitting || savingRole) && <Loader2 size={14} className="animate-spin" />}
+                {editUser ? t('saveChanges') : t('add')}
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
-}
-
-function getRoleDescription(name: string): string {
-  const map: Record<string, string> = {
-    OWNER: "Barcha huquqlarga ega kompaniya rahbari",
-    ADMIN: "Keng boshqaruv huquqlari",
-    MANAGER: "Davomat va hisobotlarni ko'rish",
-    HR: "Xodimlar boshqaruvi va ta'tillar",
-    ACCOUNTANT: "Maosh hisoblash va moliyaviy hisobotlar",
-    EMPLOYEE: "Faqat o'z ma'lumotlarini ko'rish",
-    GUARD: "Davomat kuzatuv",
-  };
-  return map[name] || "Maxsus rol";
 }

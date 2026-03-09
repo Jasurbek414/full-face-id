@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from .models import Permission, CustomRole, RolePermission
 from .serializers import PermissionSerializer, CustomRoleSerializer
 from .permissions import HasPermission
+from apps.core.utils import get_request_company
 
 class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Permission.objects.all().order_by('module', 'name')
@@ -17,7 +18,7 @@ class CustomRoleViewSet(viewsets.ModelViewSet):
     required_permission = 'settings.roles'
 
     def get_queryset(self):
-        company = getattr(self.request.user, 'company', None)
+        company = get_request_company(self.request)
         if not company:
             return CustomRole.objects.none()
         return CustomRole.objects.filter(

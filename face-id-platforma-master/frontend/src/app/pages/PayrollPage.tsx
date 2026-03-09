@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Banknote, Calculator, Users, Clock, TrendingUp, Plus, Save,
   Loader2, CheckCircle2, ChevronDown, ChevronUp, AlertTriangle,
+  Download, FileSpreadsheet, FileText, Printer, Trash2, Info, Search
 } from "lucide-react";
 import { apiClient } from "../api/client";
 import { companyUsersAPI } from "../api/devices";
 import { StatusBadge } from "../components/StatusBadge";
 import { useAuth } from "../hooks/useAuth";
-
-const BRAND = { primary: "#1A237E", accent: "#3949AB", teal: "#00897B", bg: "#F5F7FA" };
+import { useLanguage } from "../context/LanguageContext";
 
 type Tab = "records" | "salary_config" | "calculate";
 
@@ -42,33 +42,9 @@ interface CompanyUser {
   role?: { name: string } | null;
 }
 
-const fmt = (v: number | string) =>
-  Number(v).toLocaleString("uz-UZ") + " so'm";
-
-function StyledInput({
-  value, onChange, placeholder, type = "text",
-}: {
-  value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      style={{
-        width: "100%", boxSizing: "border-box", border: "1.5px solid #E5E7EB",
-        borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#111827",
-        outline: "none", backgroundColor: "#fff",
-      }}
-      onFocus={(e) => (e.target.style.borderColor = "#3949AB")}
-      onBlur={(e) => (e.target.style.borderColor = "#E5E7EB")}
-    />
-  );
-}
-
 export function PayrollPage() {
   const { user } = useAuth();
+  const { t, lang } = useLanguage();
   const [tab, setTab] = useState<Tab>("records");
 
   // Payroll records
@@ -87,7 +63,6 @@ export function PayrollPage() {
   const [cfgAmount, setCfgAmount] = useState("");
   const [cfgOvertime, setCfgOvertime] = useState("1.5");
   const [savingCfg, setSavingCfg] = useState(false);
-  const [savedCfg, setSavedCfg] = useState(false);
   const [cfgError, setCfgError] = useState("");
 
   // Calculate
@@ -96,13 +71,16 @@ export function PayrollPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
   const [calculating, setCalculating] = useState(false);
-  const [calcResult, setCalcResult] = useState<string | null>(null);
+  const [calcResult, setCalcResult] = useState<{ message: string; isError: boolean } | null>(null);
 
   const isOwnerOrAccountant =
     user?.role?.name === "OWNER" ||
     user?.role?.name === "ACCOUNTANT" ||
     user?.role?.name === "ADMIN" ||
     user?.is_staff;
+
+  const fmt = (v: number | string) =>
+    Number(v).toLocaleString(lang === "uz" ? "uz-UZ" : lang === "ru" ? "ru-RU" : "en-US") + " " + (lang === "uz" ? "so'm" : lang === "ru" ? "сум" : "sum");
 
   const fetchRecords = useCallback(async () => {
     setLoadingRecords(true);
@@ -140,10 +118,10 @@ export function PayrollPage() {
     else if (tab === "salary_config") fetchConfigs();
   }, [tab, fetchRecords, fetchConfigs]);
 
-  const handleSaveConfig = async () => {
-    if (!cfgUserId) { setCfgError("Xodimni tanlang."); return; }
+  const handleSaveConfig = useCallback(async () => {
+    if (!cfgUserId) { setCfgError(t('selectEmployee')); return; }
     if (!cfgAmount || isNaN(Number(cfgAmount)) || Number(cfgAmount) <= 0) {
-      setCfgError("To'g'ri miqdor kiriting."); return;
+      setCfgError(t('enterAmount')); return;
     }
     setSavingCfg(true);
     setCfgError("");
@@ -154,18 +132,16 @@ export function PayrollPage() {
         amount: Number(cfgAmount),
         overtime_rate: Number(cfgOvertime),
       });
-      setSavedCfg(true);
       setShowConfigForm(false);
       setCfgUserId(""); setCfgAmount(""); setCfgType("hourly"); setCfgOvertime("1.5");
       fetchConfigs();
-      setTimeout(() => setSavedCfg(false), 3000);
     } catch (e: any) {
       const d = e.response?.data;
-      setCfgError(typeof d === "object" ? Object.values(d).flat().join(" ") : "Xatolik yuz berdi.");
+      setCfgError(typeof d === "object" ? Object.values(d).flat().join(" ") : t('errorOccurred'));
     } finally {
       setSavingCfg(false);
     }
-  };
+  }, [cfgUserId, cfgAmount, cfgType, cfgOvertime, fetchConfigs, t]);
 
   const handleCalculate = async () => {
     setCalculating(true);
@@ -174,58 +150,113 @@ export function PayrollPage() {
       const { data } = await apiClient.post("/api/v1/payroll/records/calculate/", {
         month: calcMonth,
       });
-      setCalcResult(data.message || "Hisoblash yakunlandi.");
+      setCalcResult({ message: data.message || t('saved'), isError: false });
       fetchRecords();
-      setTab("records");
+      setTimeout(() => setTab("records"), 1500);
     } catch (e: any) {
-      setCalcResult(`Xatolik: ${e.response?.data?.error || "Hisoblash amalga oshmadi."}`);
+      setCalcResult({ 
+        message: e.response?.data?.error || t('errorCalculating'), 
+        isError: true 
+      });
     } finally {
       setCalculating(false);
     }
   };
 
+  const handleExportCSV = () => {
+    if (records.length === 0) return;
+    
+    const headers = [
+        t('employee'), t('month'), t('workDays'), t('workHours'), 
+        t('overtimeHours'), t('baseSalary'), t('overtimePay'), t('netSalary'), t('status')
+    ];
+    
+    const csvRows = [
+      headers.join(','),
+      ...records.map(rec => [
+        `"${rec.user_full_name}"`,
+        rec.month,
+        rec.work_days,
+        rec.work_hours,
+        rec.overtime_hours,
+        rec.base_salary,
+        rec.overtime_pay,
+        rec.net_salary,
+        rec.status
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvRows], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `payroll_${calcMonth}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const tabs = [
-    { id: "records" as Tab, label: "Maosh yozuvlari", icon: Banknote },
+    { id: "records" as Tab, label: t('payrollRecords'), icon: Banknote },
     ...(isOwnerOrAccountant
       ? [
-          { id: "salary_config" as Tab, label: "Ish haqi sozlamalari", icon: Users },
-          { id: "calculate" as Tab, label: "Hisoblash", icon: Calculator },
+          { id: "salary_config" as Tab, label: t('salaryConfig'), icon: Users },
+          { id: "calculate" as Tab, label: t('calculate'), icon: Calculator },
         ]
       : []),
   ];
 
-  const salaryTypeLabel = { hourly: "Soatlik", daily: "Kunlik", monthly: "Oylik" };
+  const salaryTypeLabel = { 
+    hourly: t('hourly'), 
+    daily: t('daily'), 
+    monthly: t('monthly') 
+  };
 
   return (
-    <div style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Maosh boshqaruvi</h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
-            Xodimlar ish haqi va hisob-kitoblarini boshqarish
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{t('payrollManagement')}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('payrollSubtitle')}</p>
         </div>
+        {tab === "records" && records.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-sm font-bold border border-emerald-100 dark:border-emerald-800/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all active:scale-95"
+            >
+              <FileSpreadsheet size={16} />
+              Excel (CSV)
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+            >
+              <Printer size={16} />
+              {t('export')}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid #E5E7EB" }}>
+      <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-2xl w-fit">
         {tabs.map(({ id, label, icon: Icon }) => {
           const active = tab === id;
           return (
             <button
               key={id}
               onClick={() => setTab(id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "10px 16px", border: "none", cursor: "pointer",
-                background: "none", fontSize: 13, fontWeight: active ? 700 : 500,
-                color: active ? BRAND.primary : "#6B7280",
-                borderBottom: active ? `2px solid ${BRAND.primary}` : "2px solid transparent",
-                marginBottom: -1,
-              }}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all
+                ${active 
+                  ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm shadow-slate-200/50 dark:shadow-none" 
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/30"}
+              `}
             >
-              <Icon size={15} />
+              <Icon size={16} />
               {label}
             </button>
           );
@@ -234,66 +265,71 @@ export function PayrollPage() {
 
       {/* Records tab */}
       {tab === "records" && (
-        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E8EAF0", overflow: "hidden" }}>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr style={{ backgroundColor: BRAND.bg, borderBottom: "1px solid #E8EAF0" }}>
+                <tr className="bg-slate-50/50 dark:bg-slate-900/20">
                   {(isOwnerOrAccountant
-                    ? ["Xodim", "Oy", "Ish kunlari", "Ish soatlari", "Q.ish soatlari", "Asosiy maosh", "Q.ish to'lovi", "Jami maosh", "Holat"]
-                    : ["Oy", "Ish kunlari", "Ish soatlari", "Asosiy maosh", "Q.ish to'lovi", "Jami maosh", "Holat"]
+                    ? [t('employee'), t('month'), t('workDays'), t('workHours'), t('overtimeHours'), t('baseSalary'), t('overtimePay'), t('netSalary'), t('status')]
+                    : [t('month'), t('workDays'), t('workHours'), t('baseSalary'), t('overtimePay'), t('netSalary'), t('status')]
                   ).map((h) => (
-                    <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6B7280", whiteSpace: "nowrap" }}>
+                    <th key={h} className="px-6 py-4 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                 {loadingRecords ? (
-                  <tr>
-                    <td colSpan={9} style={{ padding: 32, textAlign: "center", color: "#9CA3AF" }}>
-                      <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
-                    </td>
-                  </tr>
+                  Array(5).fill(0).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan={9} className="px-6 py-4">
+                        <div className="h-4 bg-slate-100 dark:bg-slate-700 rounded w-full"></div>
+                      </td>
+                    </tr>
+                  ))
                 ) : records.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: 32, textAlign: "center", color: "#6B7280", fontSize: 13 }}>
-                      Maosh yozuvlari topilmadi. Hisoblash tabiga o'ting.
+                    <td colSpan={9} className="px-6 py-20 text-center text-slate-400 dark:text-slate-500 italic">
+                      <div className="flex flex-col items-center gap-3">
+                        <Banknote size={40} className="text-slate-200 dark:text-slate-700" />
+                        <span className="text-sm font-medium">{t('noData')}</span>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   records.map((rec, i) => (
-                    <tr key={rec.id} style={{ borderBottom: "1px solid #F3F4F6", backgroundColor: i % 2 === 0 ? "#fff" : BRAND.bg }}>
+                    <tr key={rec.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
                       {isOwnerOrAccountant && (
-                        <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 600, color: "#111827" }}>
-                          {rec.user_full_name || "—"}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-bold text-slate-700 dark:text-slate-200">{rec.user_full_name || "—"}</div>
                         </td>
                       )}
-                      <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>
-                        {rec.month}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-600 dark:text-slate-400 font-medium italic">{rec.month}</div>
                       </td>
-                      <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>
-                        {rec.work_days}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-600 dark:text-slate-400 font-bold">{rec.work_days}</div>
                       </td>
-                      <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>
-                        {Number(rec.work_hours).toFixed(1)} soat
+                      <td className="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                        {Number(rec.work_hours).toFixed(1)}h
                       </td>
                       {isOwnerOrAccountant && (
-                        <td style={{ padding: "12px 16px", fontSize: 13, color: "#F59E0B" }}>
-                          {Number(rec.overtime_hours).toFixed(1)} soat
+                        <td className="px-6 py-4 whitespace-nowrap font-mono text-xs text-amber-500 font-bold">
+                          +{Number(rec.overtime_hours).toFixed(1)}h
                         </td>
                       )}
-                      <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>
-                        {fmt(rec.base_salary)}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-600 dark:text-slate-400">{fmt(rec.base_salary)}</div>
                       </td>
-                      <td style={{ padding: "12px 16px", fontSize: 13, color: "#10B981", fontWeight: 600 }}>
+                      <td className="px-6 py-4 whitespace-nowrap font-bold text-emerald-500">
                         +{fmt(rec.overtime_pay)}
                       </td>
-                      <td style={{ padding: "12px 16px", fontSize: 14, fontWeight: 700, color: BRAND.primary }}>
-                        {fmt(rec.net_salary)}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-base font-black text-indigo-600 dark:text-indigo-400">{fmt(rec.net_salary)}</div>
                       </td>
-                      <td style={{ padding: "12px 16px" }}>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={rec.status || "draft"} size="sm" />
                       </td>
                     </tr>
@@ -307,293 +343,262 @@ export function PayrollPage() {
 
       {/* Salary config tab */}
       {tab === "salary_config" && (
-        <div>
-          <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}>
+        <div className="space-y-4">
+          <div className="flex justify-end">
             <button
               onClick={() => { setShowConfigForm(!showConfigForm); setCfgError(""); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "9px 18px", borderRadius: 8, border: "none",
-                background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-                color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all active:scale-95 group"
             >
-              <Plus size={15} />
-              Ish haqi sozlash
+              <Plus size={18} className={`${showConfigForm ? 'rotate-45' : ''} transition-transform duration-300`} />
+              {showConfigForm ? t('cancel') : t('configureSalary')}
             </button>
           </div>
 
           {/* Config form */}
           {showConfigForm && (
-            <div style={{
-              background: "#fff", borderRadius: 12, border: "1px solid #E8EAF0",
-              padding: 24, marginBottom: 20,
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 20 }}>
-                Xodim ish haqi sozlamalari
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                    Xodim *
-                  </label>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 animate-in slide-in-from-top-4 duration-300">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                <Users size={18} className="text-indigo-500" />
+                {t('configureSalary')}
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">{t('employee')} *</label>
                   <select
                     value={cfgUserId}
                     onChange={(e) => setCfgUserId(e.target.value)}
-                    style={{
-                      width: "100%", border: "1.5px solid #E5E7EB", borderRadius: 8,
-                      padding: "9px 12px", fontSize: 13, outline: "none", background: "#fff",
-                    }}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                   >
-                    <option value="">Xodimni tanlang</option>
+                    <option value="">{t('selectEmployee')}</option>
                     {users.map((u) => (
                       <option key={u.id} value={u.id}>{u.full_name || u.phone}</option>
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                    Ish haqi turi
-                  </label>
+                
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">{t('salaryType')}</label>
                   <select
                     value={cfgType}
                     onChange={(e) => setCfgType(e.target.value as any)}
-                    style={{
-                      width: "100%", border: "1.5px solid #E5E7EB", borderRadius: 8,
-                      padding: "9px 12px", fontSize: 13, outline: "none", background: "#fff",
-                    }}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                   >
-                    <option value="hourly">Soatlik</option>
-                    <option value="daily">Kunlik</option>
-                    <option value="monthly">Oylik</option>
+                    <option value="hourly">{t('hourly')}</option>
+                    <option value="daily">{t('daily')}</option>
+                    <option value="monthly">{t('monthly')}</option>
                   </select>
                 </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                    Miqdor (so'm) *
-                    <span style={{ fontWeight: 400, color: "#9CA3AF", marginLeft: 4 }}>
-                      {cfgType === "hourly" ? "1 soat uchun" : cfgType === "daily" ? "1 kun uchun" : "oylik"}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">
+                    {t('amount')} ({lang === 'uz' ? "so'm" : lang === 'ru' ? 'сум' : 'sum'}) *
+                    <span className="font-normal text-slate-400 dark:text-slate-500 lowercase ml-2">
+                       (per {cfgType === "hourly" ? "hour" : cfgType === "daily" ? "day" : "month"})
                     </span>
                   </label>
-                  <StyledInput
+                  <input
                     type="number"
                     value={cfgAmount}
-                    onChange={setCfgAmount}
-                    placeholder={cfgType === "hourly" ? "10000" : cfgType === "daily" ? "200000" : "3000000"}
+                    onChange={(e) => setCfgAmount(e.target.value)}
+                    placeholder={cfgType === "hourly" ? "15000" : cfgType === "daily" ? "200000" : "5000000"}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                 </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                    Qo'shimcha ish koeffitsienti
-                    <span style={{ fontWeight: 400, color: "#9CA3AF", marginLeft: 4 }}>
-                      (asosiy × koeff.)
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">
+                    {t('overtimeRate')} (%)
+                    <span className="font-normal text-slate-400 dark:text-slate-500 lowercase ml-2">
+                      (multiplier)
                     </span>
                   </label>
-                  <StyledInput type="number" value={cfgOvertime} onChange={setCfgOvertime} placeholder="1.5" />
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={cfgOvertime} 
+                    onChange={(e) => setCfgOvertime(e.target.value)} 
+                    placeholder="1.5"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
                 </div>
               </div>
 
               {cfgAmount && cfgType === "hourly" && (
-                <div style={{
-                  padding: "12px 16px", background: "#F0F9FF", borderRadius: 8,
-                  border: "1px solid #BAE6FD", marginBottom: 16, fontSize: 13, color: "#0369A1",
-                }}>
-                  💡 1 kunlik (8 soat): {fmt(Number(cfgAmount) * 8)} &nbsp;|&nbsp;
-                  Oylik (22 ish kuni): {fmt(Number(cfgAmount) * 8 * 22)} &nbsp;|&nbsp;
-                  Q.ish 1 soat: {fmt(Number(cfgAmount) * Number(cfgOvertime))}
+                <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800/50 mb-6 text-sm text-indigo-700 dark:text-indigo-300 flex items-start gap-3">
+                  <Info size={18} className="mt-0.5" />
+                  <div>
+                    <p>💡 <strong>1 day</strong> (8h): {fmt(Number(cfgAmount) * 8)}</p>
+                    <p>💡 <strong>1 month</strong> (22d): {fmt(Number(cfgAmount) * 8 * 22)}</p>
+                    <p>💡 <strong>Overtime</strong> (1h): {fmt(Number(cfgAmount) * Number(cfgOvertime))}</p>
+                  </div>
                 </div>
               )}
 
               {cfgError && (
-                <div style={{
-                  padding: "10px 14px", borderRadius: 8, marginBottom: 16,
-                  background: "#FEF2F2", border: "1px solid #FECACA",
-                  color: "#DC2626", fontSize: 13, display: "flex", alignItems: "center", gap: 8,
-                }}>
-                  <AlertTriangle size={14} /> {cfgError}
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800/50 mb-6 text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+                  <AlertTriangle size={18} /> {cfgError}
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowConfigForm(false)}
-                  style={{
-                    padding: "9px 20px", borderRadius: 8, border: "1.5px solid #E5E7EB",
-                    background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}
+                  className="px-6 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
                 >
-                  Bekor qilish
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={handleSaveConfig}
                   disabled={savingCfg}
-                  style={{
-                    padding: "9px 20px", borderRadius: 8, border: "none",
-                    background: savingCfg ? "#9CA3AF" : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-                    color: "#fff", fontSize: 13, fontWeight: 700,
-                    cursor: savingCfg ? "not-allowed" : "pointer",
-                    display: "flex", alignItems: "center", gap: 8,
-                  }}
+                  className="flex items-center gap-2 px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
-                  {savingCfg && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
-                  Saqlash
+                  {savingCfg && <Loader2 size={16} className="animate-spin" />}
+                  <Save size={18} />
+                  {t('save')}
                 </button>
               </div>
             </div>
           )}
 
           {/* Configs table */}
-          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E8EAF0", overflow: "hidden" }}>
-            {loadingConfigs ? (
-              <div style={{ textAlign: "center", padding: 48 }}>
-                <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} color="#9CA3AF" />
-              </div>
-            ) : configs.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 48, color: "#9CA3AF", fontSize: 13 }}>
-                Hali ish haqi sozlamasi qo'shilmagan. Yuqoridagi tugmani bosing.
-              </div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: BRAND.bg, borderBottom: "1px solid #E8EAF0" }}>
-                      {["Xodim", "Ish haqi turi", "Miqdor", "Q.ish koeff.", "Amallar"].map((h) => (
-                        <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6B7280" }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {configs.map((cfg, i) => {
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 dark:bg-slate-900/20">
+                    {[t('employee'), t('salaryType'), t('amount'), t('overtimeRate'), t('actions')].map((h) => (
+                      <th key={h} className="px-6 py-4 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {loadingConfigs ? (
+                    Array(3).fill(0).map((_, i) => (
+                      <tr key={i} className="animate-pulse"><td colSpan={5} className="px-6 py-10"><div className="h-4 bg-slate-100 dark:bg-slate-700 rounded w-full"></div></td></tr>
+                    ))
+                  ) : configs.length === 0 ? (
+                    <tr><td colSpan={5} className="px-6 py-20 text-center text-slate-400 dark:text-slate-500 italic font-medium">{t('noData')}</td></tr>
+                  ) : (
+                    configs.map((cfg, i) => {
                       const u = users.find((u) => u.id === cfg.user);
                       return (
-                        <tr key={cfg.id || i} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                          <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 600, color: "#111827" }}>
-                            {u?.full_name || u?.phone || cfg.user}
+                        <tr key={cfg.id || i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-bold text-slate-900 dark:text-white uppercase">{u?.full_name || u?.phone || cfg.user}</div>
                           </td>
-                          <td style={{ padding: "12px 16px", fontSize: 13 }}>
-                            <span style={{
-                              padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-                              background: cfg.salary_type === "hourly" ? "#DBEAFE" : cfg.salary_type === "daily" ? "#D1FAE5" : "#EDE9FE",
-                              color: cfg.salary_type === "hourly" ? "#1D4ED8" : cfg.salary_type === "daily" ? "#059669" : "#7C3AED",
-                            }}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`
+                              px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest
+                              ${cfg.salary_type === "hourly" ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" : 
+                                cfg.salary_type === "daily" ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" : 
+                                "bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400"}
+                            `}>
                               {salaryTypeLabel[cfg.salary_type]}
                             </span>
                           </td>
-                          <td style={{ padding: "12px 16px", fontSize: 14, fontWeight: 700, color: BRAND.primary }}>
-                            {fmt(cfg.amount)}
-                            <span style={{ fontSize: 11, fontWeight: 400, color: "#9CA3AF", marginLeft: 4 }}>
-                              /{cfg.salary_type === "hourly" ? "soat" : cfg.salary_type === "daily" ? "kun" : "oy"}
-                            </span>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-black text-slate-900 dark:text-white italic">
+                              {fmt(cfg.amount)}
+                              <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 not-italic ml-1">
+                                /{cfg.salary_type === "hourly" ? "h" : cfg.salary_type === "daily" ? "d" : "m"}
+                              </span>
+                            </div>
                           </td>
-                          <td style={{ padding: "12px 16px", fontSize: 13, color: "#F59E0B", fontWeight: 600 }}>
+                          <td className="px-6 py-4 whitespace-nowrap font-bold text-amber-500">
                             ×{cfg.overtime_rate}
                           </td>
-                          <td style={{ padding: "12px 16px" }}>
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <button
                               onClick={async () => {
-                                if (!window.confirm("Sozlamani o'chirishni tasdiqlaysizmi?")) return;
+                                if (!window.confirm(t('deleteConfigConfirm'))) return;
                                 try {
                                   await apiClient.delete(`/api/v1/payroll/config/${cfg.id}/`);
                                   fetchConfigs();
-                                } catch { alert("Xatolik yuz berdi."); }
+                                } catch { alert(t('errorOccurred')); }
                               }}
-                              style={{
-                                padding: "5px 12px", borderRadius: 6, border: "1.5px solid #FECACA",
-                                background: "#fff", color: "#DC2626", fontSize: 12, cursor: "pointer",
-                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all active:scale-90"
                             >
-                              O'chirish
+                              <Trash2 size={16} />
                             </button>
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* Calculate tab */}
       {tab === "calculate" && (
-        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E8EAF0", padding: 32, maxWidth: 480 }}>
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Maosh hisoblash</div>
-            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 6 }}>
-              Tanlangan oy uchun barcha xodimlarning maoshini davomat ma'lumotlari asosida hisoblaydi.
+        <div className="max-w-2xl mx-auto py-8">
+            <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden animate-in zoom-in-95 duration-300">
+                <div className="p-8 space-y-8">
+                    <div className="space-y-2 text-center">
+                        <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center text-indigo-500 mx-auto mb-4">
+                            <Calculator size={32} />
+                        </div>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{t('calculateSalary')}</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">{t('calculateSubtitle')}</p>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-1">{t('calculationMonth')}</label>
+                            <input
+                            type="month"
+                            value={calcMonth}
+                            onChange={(e) => setCalcMonth(e.target.value)}
+                            className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-center"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {[
+                                { label: t('workDays'), icon: Clock, info: t('workDaysDesc') },
+                                { label: t('overtimeHours'), icon: TrendingUp, info: t('overtimeDesc') },
+                            ].map(({ label, icon: Icon, info }) => (
+                                <div key={label} className="p-4 bg-slate-50/50 dark:bg-slate-900/20 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                                    <Icon size={20} className="text-emerald-500 mb-3" />
+                                    <div className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">{label}</div>
+                                    <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase leading-3 italic">{info}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {calcResult && (
+                        <div className={`
+                            p-4 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2
+                            ${calcResult.isError ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-800/50" : "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/50"}
+                        `}>
+                            {calcResult.isError ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+                            <span className="text-sm font-bold tracking-tight">{calcResult.message}</span>
+                        </div>
+                    )}
+
+                    <button
+                        onClick={handleCalculate}
+                        disabled={calculating}
+                        className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-base font-black shadow-xl shadow-indigo-600/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3"
+                    >
+                        {calculating ? (
+                            <Loader2 size={24} className="animate-spin" />
+                        ) : (
+                            <Calculator size={24} />
+                        )}
+                        {calculating ? t('calculating') : `${calcMonth} ${t('calculateSalary')}`}
+                    </button>
+                </div>
             </div>
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 8 }}>
-              Hisoblash oyi
-            </label>
-            <input
-              type="month"
-              value={calcMonth}
-              onChange={(e) => setCalcMonth(e.target.value)}
-              style={{
-                border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "9px 12px",
-                fontSize: 13, outline: "none", color: "#111827",
-              }}
-            />
-          </div>
-
-          {/* Info cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-            {[
-              { label: "Ish kunlari hisoblanadi", icon: Clock, info: "Davomat yozuvlari asosida" },
-              { label: "Qo'shimcha ish soatlari", icon: TrendingUp, info: "Ish haqi sozlamasidagi koeff. bilan" },
-            ].map(({ label, icon: Icon, info }) => (
-              <div key={label} style={{ padding: 14, background: BRAND.bg, borderRadius: 8, border: "1px solid #E8EAF0" }}>
-                <Icon size={18} color={BRAND.teal} />
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginTop: 8 }}>{label}</div>
-                <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>{info}</div>
-              </div>
-            ))}
-          </div>
-
-          {calcResult && (
-            <div style={{
-              padding: "12px 16px", borderRadius: 8, marginBottom: 20, fontSize: 13,
-              background: calcResult.startsWith("Xatolik") ? "#FEF2F2" : "#F0FDF4",
-              border: `1px solid ${calcResult.startsWith("Xatolik") ? "#FECACA" : "#A7F3D0"}`,
-              color: calcResult.startsWith("Xatolik") ? "#DC2626" : "#059669",
-              display: "flex", alignItems: "center", gap: 8,
-            }}>
-              {calcResult.startsWith("Xatolik")
-                ? <AlertTriangle size={14} />
-                : <CheckCircle2 size={14} />
-              }
-              {calcResult}
-            </div>
-          )}
-
-          <button
-            onClick={handleCalculate}
-            disabled={calculating}
-            style={{
-              width: "100%", padding: "13px", borderRadius: 8, border: "none",
-              background: calculating ? "#9CA3AF" : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-              color: "#fff", fontSize: 14, fontWeight: 700,
-              cursor: calculating ? "not-allowed" : "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              boxShadow: calculating ? "none" : "0 4px 16px rgba(26,35,126,0.3)",
-            }}
-          >
-            {calculating
-              ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Hisoblanmoqda...</>
-              : <><Calculator size={16} /> {calcMonth} oyi maoshlarini hisoblash</>
-            }
-          </button>
         </div>
       )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

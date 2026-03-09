@@ -5,16 +5,24 @@ from django.db.models import Sum
 
 from .models import LeaveType, LeaveRequest
 from .serializers import LeaveTypeSerializer, LeaveRequestSerializer, LeaveBalanceSerializer
+from apps.core.utils import get_request_company
 
 class LeaveTypeViewSet(viewsets.ModelViewSet):
     queryset = LeaveType.objects.filter(is_deleted=False)
     serializer_class = LeaveTypeSerializer
 
     def get_queryset(self):
-        return self.queryset.filter(company=self.request.user.company)
+        company = get_request_company(self.request)
+        if not company:
+            return self.queryset.none()
+        return self.queryset.filter(company=company)
 
     def perform_create(self, serializer):
-        serializer.save(company=self.request.user.company)
+        company = get_request_company(self.request)
+        if not company:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Kompaniyangiz yo'q.")
+        serializer.save(company=company)
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
     queryset = LeaveRequest.objects.filter(is_deleted=False)
@@ -22,15 +30,22 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = self.queryset.filter(company=user.company)
+        company = get_request_company(self.request)
+        if not company:
+            return self.queryset.none()
+        qs = self.queryset.filter(company=company)
         if not user.is_staff and not user.groups.filter(name='Manager').exists():
             qs = qs.filter(user=user)
         return qs
 
     def perform_create(self, serializer):
+        company = get_request_company(self.request)
+        if not company:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Kompaniyangiz yo'q.")
         serializer.save(
             user=self.request.user,
-            company=self.request.user.company
+            company=company
         )
 
     @action(detail=False, methods=['get'])
@@ -81,7 +96,10 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def balance(self, request):
-        types = LeaveType.objects.filter(company=request.user.company, is_deleted=False)
+        company = get_request_company(request)
+        if not company:
+            return Response([])
+        types = LeaveType.objects.filter(company=company, is_deleted=False)
         results = []
         for lt in types:
             agg = LeaveRequest.objects.filter(

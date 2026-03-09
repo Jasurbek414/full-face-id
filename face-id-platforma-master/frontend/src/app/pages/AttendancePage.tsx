@@ -1,552 +1,412 @@
-import React, { useState, useMemo } from "react";
-import { Search, Filter, ChevronDown, MoreHorizontal, Download, Scan, Hash, PenLine, ChevronUp, LogOut, Clock } from "lucide-react";
-import { StatusBadge } from "../components/StatusBadge";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Search, Download, Scan, Hash, PenLine, LogOut, Clock,
+  ChevronLeft, ChevronRight, MoreVertical, Plus, Users,
+  UserCheck, AlertCircle, UserX, X, Loader2,
+} from "lucide-react";
 import { UserAvatar } from "../components/UserAvatar";
 import { apiClient } from "../api/client";
-import { useAttendanceList } from "../hooks/useAttendance";
 import { formatTime, formatDate, formatDuration } from "../utils/time";
-import { useEmployees } from "../hooks/useEmployees";
+import { useLanguage } from "../context/LanguageContext";
+import { useTheme } from "../context/ThemeContext";
 
-const BRAND = {
-  primary: "#1A237E",
-  accent: "#3949AB",
-  teal: "#00897B",
-  bg: "#F5F7FA",
-};
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface AttendanceRecord {
+  id: string; user: string; user_name: string; user_photo: string | null;
+  department_name: string | null; date: string;
+  check_in: string | null; check_out: string | null;
+  status: "on_time" | "late" | "early_leave" | "absent";
+  check_in_method: string; net_seconds: number | null;
+}
+interface TodayStats { total_employees: number; present: number; late: number; on_time: number; on_site: number; absent: number; }
+interface Employee  { id: string; first_name: string; last_name: string; }
+interface Department{ id: string; name: string; }
+
+const STATUS_CONFIG = {
+  on_time:     { cls: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" },
+  late:        { cls: "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400" },
+  early_leave: { cls: "bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400" },
+  absent:      { cls: "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400" },
+} as const;
 
 const METHOD_ICON: Record<string, React.ReactNode> = {
-  "Face ID": <Scan size={13} color="#3949AB" />,
-  PIN: <Hash size={13} color="#00897B" />,
-  Manual: <PenLine size={13} color="#9CA3AF" />,
+  face_id: <Scan size={13} className="text-indigo-600 dark:text-indigo-400" />,
+  pin:     <Hash size={13} className="text-teal-600 dark:text-teal-400" />,
+  manual:  <PenLine size={13} className="text-gray-400" />,
+  qr:      <Hash size={13} className="text-purple-600 dark:text-purple-400" />,
 };
+const METHOD_LABEL: Record<string, string> = { face_id: "Face ID", pin: "PIN", manual: "Manual", qr: "QR Code" };
 
-const COLUMNS = ["Employee", "Date", "Check-in", "Check-out", "Duration", "Status", "Method", "Actions"];
-
+// ─── Component ───────────────────────────────────────────────────────────────
 export function AttendancePage() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [methodFilter, setMethodFilter] = useState<string>("all");
-  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const [sortCol, setSortCol] = useState<string>("date");
-  const [sortAsc, setSortAsc] = useState(false);
+  const { t }      = useLanguage();
+  const { isDark } = useTheme();
+
+  const [records, setRecords]         = useState<AttendanceRecord[]>([]);
+  const [total, setTotal]             = useState(0);
+  const [loading, setLoading]         = useState(true);
+  const [todayRecord, setTodayRecord] = useState<any>(null);
+  const [todayStats, setTodayStats]   = useState<TodayStats | null>(null);
+  const [employees, setEmployees]     = useState<Employee[]>([]);
+  const [departments, setDepts]       = useState<Department[]>([]);
+
+  const [search, setSearch]     = useState("");
+  const [statusF, setStatusF]   = useState("all");
+  const [methodF, setMethodF]   = useState("all");
+  const [userF, setUserF]       = useState("");
+  const [deptF, setDeptF]       = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo]     = useState("");
+  const [page, setPage]         = useState(1);
+  const perPage = 15;
+
+  const [toast, setToast]           = useState<string | null>(null);
   const [actionOpen, setActionOpen] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const perPage = 10;
-
-  const [toast, setToast] = useState<string | null>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [employeesList, setEmployeesList] = useState<any[]>([]);
-  const { list: listEmployees } = useEmployees();
-
-  const [userFilter, setUserFilter] = useState<string>("");
-  const [deptFilter, setDeptFilter] = useState<string>("");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-  const [departmentsList, setDepartmentsList] = useState<any[]>([]);
-
-  const [formData, setFormData] = useState({
-    user: "",
-    date: new Date().toISOString().split("T")[0],
-    check_in: "",
-    check_out: "",
-    check_in_method: "manual" // "manual" | "pin" | "qr"
-  });
+  const [addModal, setAddModal]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting]     = useState<string | null>(null);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
-  React.useEffect(() => {
-    loadEmployees();
-    apiClient.get("/api/v1/companies/departments/")
-      .then(res => setDepartmentsList(res.data.results || res.data || []))
-      .catch(console.error);
+  const [form, setForm] = useState({
+    user: "", date: new Date().toISOString().slice(0, 10),
+    check_in: "", check_out: "", check_in_method: "manual",
+  });
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const showToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 3000);
+  const loadTodayRecord = useCallback(async () => {
+    try { setTodayRecord((await apiClient.get("/api/v1/attendance/today/")).data); }
+    catch { setTodayRecord(null); }
+  }, []);
+
+  const loadTodayStats = useCallback(async () => {
+    try { setTodayStats((await apiClient.get("/api/v1/attendance/today-stats/")).data); }
+    catch { setTodayStats(null); }
+  }, []);
+
+  const loadRecords = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, any> = { page };
+      if (search)           params.search     = search;
+      if (statusF !== "all") params.status    = statusF;
+      if (methodF !== "all") params.method    = methodF;
+      if (userF)             params.user_id   = userF;
+      if (deptF)             params.department = deptF;
+      if (dateFrom)          params.date_from = dateFrom;
+      if (dateTo)            params.date_to   = dateTo;
+      const r = await apiClient.get("/api/v1/attendance/", { params });
+      setRecords(r.data.results ?? r.data ?? []);
+      setTotal(r.data.count ?? 0);
+    } catch { showToast("Ma'lumot yuklashda xatolik"); }
+    finally { setLoading(false); }
+  }, [page, search, statusF, methodF, userF, deptF, dateFrom, dateTo, showToast]);
+
+  useEffect(() => {
+    loadTodayRecord(); loadTodayStats();
+    apiClient.get("/api/v1/employees/").then(r => setEmployees(r.data.results ?? r.data ?? [])).catch(() => {});
+    apiClient.get("/api/v1/companies/departments/").then(r => setDepts(r.data.results ?? r.data ?? [])).catch(() => {});
+  }, [loadTodayRecord, loadTodayStats]);
+
+  useEffect(() => { loadRecords(); }, [loadRecords]);
+
+  const handleCheckIn = async () => {
+    setCheckingIn(true);
+    try {
+      await apiClient.post("/api/v1/attendance/check-in/", { method: "manual" });
+      showToast(t('checkInSuccess'));
+      await Promise.all([loadTodayRecord(), loadTodayStats(), loadRecords()]);
+    } catch (e: any) {
+      const d = e.response?.data;
+      showToast(d?.detail || d?.message || "Xatolik");
+    } finally { setCheckingIn(false); }
+  };
+
+  const handleCheckOut = async () => {
+    setCheckingOut(true);
+    try {
+      await apiClient.post("/api/v1/attendance/check-out/", {});
+      showToast(t('checkOutSuccess'));
+      await Promise.all([loadTodayRecord(), loadTodayStats(), loadRecords()]);
+    } catch (e: any) {
+      const d = e.response?.data;
+      showToast(d?.detail || d?.message || "Xatolik");
+    } finally { setCheckingOut(false); }
+  };
+
+  const handleAddRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.user || !form.date || !form.check_in) { showToast("Xodim, sana va kirish vaqtini to'ldiring"); return; }
+    setSubmitting(true);
+    try {
+      await apiClient.post("/api/v1/attendance/", {
+        user: form.user, date: form.date, check_in: form.check_in,
+        check_out: form.check_out || null, check_in_method: form.check_in_method,
+      });
+      showToast(t('recordAdded'));
+      setAddModal(false);
+      setForm({ user: "", date: new Date().toISOString().slice(0, 10), check_in: "", check_out: "", check_in_method: "manual" });
+      await Promise.all([loadRecords(), loadTodayStats()]);
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || "Qo'shishda xatolik");
+    } finally { setSubmitting(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm(t('deleteConfirm'))) return;
+    setDeleting(id);
+    try {
+      await apiClient.delete(`/api/v1/attendance/${id}/`);
+      showToast(t('recordDeleted'));
+      setRecords(prev => prev.filter(r => r.id !== id));
+      setTotal(t => t - 1);
+      await loadTodayStats();
+    } catch { showToast("O'chirishda xatolik"); }
+    finally { setDeleting(null); }
   };
 
   const handleExport = async () => {
     try {
-      const resp = await apiClient.get<Blob>("/api/v1/attendance/?export_format=csv", { responseType: "blob" });
-      const url = URL.createObjectURL(resp.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "attendance.csv";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      showToast("Export failed!");
-    }
+      const r = await apiClient.get<Blob>("/api/v1/attendance/?export_format=csv", { responseType: "blob" });
+      const url = URL.createObjectURL(r.data);
+      const a = Object.assign(document.createElement("a"), { href: url, download: "attendance.csv" });
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch { showToast("Export muvaffaqiyatsiz"); }
   };
 
-  const loadEmployees = async () => {
-    try {
-      const res = await listEmployees();
-      setEmployeesList(res.results || res.data || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const resetFilters = () => { setSearch(""); setStatusF("all"); setMethodF("all"); setUserF(""); setDeptF(""); setDateFrom(""); setDateTo(""); setPage(1); };
+  const hasFilters = !!(search || statusF !== "all" || methodF !== "all" || userF || deptF || dateFrom || dateTo);
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
 
-  const submitAddRecord = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      await apiClient.post("/api/v1/attendance/", formData);
-      setIsAddModalOpen(false);
-      showToast("Record qo'shildi!");
-      window.location.reload();
-    } catch (err: any) {
-      alert("Xato: " + (err.response?.data?.detail || "Kiritishda xatolik"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const myStatus = !todayRecord?.check_in ? "none" : !todayRecord?.check_out ? "in" : "done";
 
-  const filters = {
-    search: search || undefined,
-    status: statusFilter === "all" ? undefined : statusFilter,
-    method: methodFilter === "all" ? undefined : methodFilter,
-    user_id: userFilter || undefined,
-    department: deptFilter || undefined,
-    date_from: dateFrom || undefined,
-    date_to: dateTo || undefined,
-    page
-  };
-
-  const { data: apiData, total, loading } = useAttendanceList(filters);
-
-  const displayData = useMemo(() => {
-    if (!apiData || apiData.length === 0) return [];
-    return apiData.map((r: any) => ({
-      id: r.id,
-      employeeName: r.user_name,
-      employeeAvatar: r.user_photo || "",
-      department: typeof r.department === 'object' ? r.department?.name : r.department || r.department_name || "General",
-      date: r.date,
-      checkIn: r.check_in ? formatTime(r.check_in) : "",
-      checkOut: r.check_out ? formatTime(r.check_out) : null,
-      duration: r.net_seconds ? formatDuration(r.net_seconds) : "—",
-      status: r.status as any,
-      method: r.check_in_method || "Manual"
-    }));
-  }, [apiData, loading]);
-
-  const toggleRow = (id: string) => {
-    const next = new Set(selectedRows);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedRows(next);
-  };
-
-  const toggleAll = () => {
-    if (selectedRows.size === displayData.length) setSelectedRows(new Set());
-    else setSelectedRows(new Set(displayData.map((r) => r.id)));
-  };
-
-  const handleSort = (col: string) => {
-    if (sortCol === col) setSortAsc(!sortAsc);
-    else { setSortCol(col); setSortAsc(true); }
-  };
-
-  const totalPages = Math.ceil((total || displayData.length) / perPage);
-  const paginated = displayData; // Backend logic handles pagination usually, but for mock fallback we might slice.
-  // In our hook, data is already paginated results if total is present.
-
-  const SortIcon = ({ col }: { col: string }) =>
-    sortCol === col ? (
-      sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-    ) : (
-      <ChevronDown size={12} style={{ opacity: 0.3 }} />
-    );
+  const statusLabel = {
+    on_time: t('onTime'), late: t('arrivedLate'), early_leave: t('earlyLeave'), absent: t('didntCome'),
+  } as Record<string, string>;
 
   return (
-    <div style={{ fontFamily: "Inter, sans-serif" }}>
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div className="font-sans">
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Attendance Log</h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
-            {total || displayData.length} records found
-            {selectedRows.size > 0 && ` · ${selectedRows.size} selected`}
-            {loading && " · Loading..."}
+          <h1 className="text-[22px] font-bold text-gray-900 dark:text-gray-100 m-0">{t('attendanceLog')}</h1>
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
+            {loading ? t('loading') : `${total} ${t('recordsFound')}`}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => {
-              apiClient.post("/api/v1/attendance/check-in/", { method: "manual" })
-                .then(() => {
-                  showToast("Check-in muvaffaqiyatli!");
-                  setTimeout(() => window.location.reload(), 1000);
-                })
-                .catch((err: any) => {
-                  const d = err.response?.data;
-                  showToast(d?.detail || d?.message || d?.non_field_errors?.[0] || "Check-in xatoligi");
-                });
-            }}
-            style={{
-              padding: "9px 18px",
-              backgroundColor: BRAND.teal,
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <Clock size={15} />
-            Check-in
+        <div className="flex gap-2">
+          <button onClick={handleExport}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#1A1D2E] text-gray-700 dark:text-gray-300 text-[13px] font-medium hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+            <Download size={14} />{t('export')}
           </button>
-          <button
-            onClick={() => {
-              apiClient.post("/api/v1/attendance/check-out/", { method: "manual" })
-                .then(() => {
-                  showToast("Check-out muvaffaqiyatli!");
-                  setTimeout(() => window.location.reload(), 1000);
-                })
-                .catch((err: any) => {
-                  const d = err.response?.data;
-                  showToast(d?.detail || d?.message || d?.non_field_errors?.[0] || "Check-out xatoligi");
-                });
-            }}
-            style={{
-              padding: "9px 18px",
-              backgroundColor: "#B71C1C",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <LogOut size={15} />
-            Check-out
-          </button>
-          <button
-            onClick={handleExport}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "9px 16px",
-              borderRadius: 8,
-              border: "1.5px solid #E8EAF0",
-              backgroundColor: "#fff",
-              color: "#374151",
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
-          >
-            <Download size={14} />
-            Export
-          </button>
-          <button
-            onClick={() => { loadEmployees(); setIsAddModalOpen(true); }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "9px 16px",
-              borderRadius: 8,
-              border: "none",
-              backgroundColor: BRAND.primary,
-              color: "#fff",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            + Add Record
+          <button onClick={() => setAddModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-800 dark:bg-indigo-700 text-white text-[13px] font-semibold hover:bg-indigo-900 dark:hover:bg-indigo-600 transition-colors">
+            <Plus size={14} />{t('addRecord')}
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            backgroundColor: "#fff",
-            border: "1.5px solid #E8EAF0",
-            borderRadius: 8,
-            padding: "8px 14px",
-            flex: 1,
-            minWidth: 200,
-            maxWidth: 360,
-          }}
-        >
-          <Search size={15} color="#9CA3AF" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search employee, department..."
-            style={{ border: "none", outline: "none", fontSize: 13, color: "#374151", width: "100%", backgroundColor: "transparent" }}
-          />
+      {/* ── My Status Banner ── */}
+      <div className={`flex items-center justify-between px-4 py-3 rounded-xl mb-4 border flex-wrap gap-2
+        ${myStatus === "none" ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50" :
+          myStatus === "in"   ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/50" :
+                                "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800/50"}`}>
+        <div className={`flex items-center gap-2 text-[13px] font-medium
+          ${myStatus === "none" ? "text-blue-700 dark:text-blue-400" :
+            myStatus === "in"   ? "text-emerald-700 dark:text-emerald-400" :
+                                  "text-purple-700 dark:text-purple-400"}`}>
+          <div className={`w-2 h-2 rounded-full
+            ${myStatus === "in" ? "bg-emerald-500 animate-pulse" :
+              myStatus === "done" ? "bg-purple-500" : "bg-blue-400"}`} />
+          {myStatus === "none" && t('notCheckedIn')}
+          {myStatus === "in"   && `${t('currentlyInOffice')}: ${todayRecord?.check_in ? formatTime(todayRecord.check_in) : "—"}`}
+          {myStatus === "done" && `${todayRecord?.check_in ? formatTime(todayRecord.check_in) : "—"} – ${todayRecord?.check_out ? formatTime(todayRecord.check_out) : "—"} · ${todayRecord?.net_seconds ? formatDuration(todayRecord.net_seconds) : "—"}`}
         </div>
-
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1.5px solid #E8EAF0",
-            backgroundColor: "#fff",
-            fontSize: 13,
-            color: "#374151",
-            outline: "none",
-            cursor: "pointer",
-          }}
-        >
-          <option value="all">All Statuses</option>
-          <option value="on_time">On Time</option>
-          <option value="late">Late</option>
-          <option value="early_leave">Early Leave</option>
-          <option value="absent">Absent</option>
-        </select>
-
-        <select
-          value={methodFilter}
-          onChange={(e) => setMethodFilter(e.target.value)}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1.5px solid #E8EAF0",
-            backgroundColor: "#fff",
-            fontSize: 13,
-            color: "#374151",
-            outline: "none",
-            cursor: "pointer",
-          }}
-        >
-          <option value="all">All Methods</option>
-          <option value="Face ID">Face ID</option>
-          <option value="PIN">PIN</option>
-          <option value="Manual">Manual</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {myStatus === "none" && (
+            <button disabled={checkingIn} onClick={handleCheckIn}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-[12px] font-semibold hover:bg-teal-700 disabled:opacity-60 transition-colors">
+              {checkingIn ? <Loader2 size={12} className="animate-spin" /> : <Clock size={12} />}
+              {t('checkInBtn')}
+            </button>
+          )}
+          {myStatus === "in" && (
+            <button disabled={checkingOut} onClick={handleCheckOut}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 text-white text-[12px] font-semibold hover:bg-red-800 disabled:opacity-60 transition-colors">
+              {checkingOut ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />}
+              {t('checkOutBtn')}
+            </button>
+          )}
+          {myStatus === "done" && <span className="text-[12px] font-semibold text-purple-700 dark:text-purple-400">✓ {t('completedToday')}</span>}
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <select
-          value={userFilter}
-          onChange={(e) => setUserFilter(e.target.value)}
-          style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E8EAF0", backgroundColor: "#fff", fontSize: 13, color: "#374151", outline: "none", cursor: "pointer", flex: 1, minWidth: 150 }}
-        >
-          <option value="">Barcha xodimlar</option>
-          {employeesList.map(emp => (
-            <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
+      {/* ── Stats ── */}
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        {[
+          { icon: <Users size={18} />,       label: t('totalEmployees'), value: todayStats?.total_employees ?? "—", cls: "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300" },
+          { icon: <UserCheck size={18} />,   label: t('onSiteNow'),      value: todayStats?.on_site ?? "—",         cls: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400", sub: todayStats ? `${todayStats.present} ${t('cameToday')}` : undefined },
+          { icon: <AlertCircle size={18} />, label: t('arrivedLate'),    value: todayStats?.late ?? "—",            cls: "bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400" },
+          { icon: <UserX size={18} />,       label: t('didntCome'),      value: todayStats?.absent ?? "—",          cls: "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400" },
+        ].map(({ icon, label, value, cls, sub }) => (
+          <div key={label} className="bg-white dark:bg-[#1A1D2E] rounded-xl px-4 py-3.5 border border-gray-200 dark:border-[#2D3148] shadow-sm flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${cls}`}>{icon}</div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
+              <div className="text-[12px] text-gray-500 dark:text-gray-400">{label}</div>
+              {sub && <div className="text-[11px] text-gray-400 dark:text-gray-500">{sub}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filters ── */}
+      <div className="bg-white dark:bg-[#1A1D2E] rounded-xl px-4 py-3 mb-4 border border-gray-200 dark:border-[#2D3148] shadow-sm">
+        <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex items-center gap-2 border border-gray-200 dark:border-[#2D3148] rounded-lg px-3 py-1.5 flex-1 min-w-[180px] max-w-[280px]">
+            <Search size={13} className="text-gray-400 shrink-0" />
+            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+              placeholder={t('searchEmployees')}
+              className="border-none outline-none text-[13px] text-gray-800 dark:text-gray-200 bg-transparent w-full placeholder:text-gray-400 dark:placeholder:text-gray-600" />
+          </div>
+
+          {[
+            { val: statusF, set: (v: string) => { setStatusF(v); setPage(1); }, opts: [
+              ["all", t('allStatuses')], ["on_time", t('onTime')], ["late", t('arrivedLate')], ["early_leave", t('earlyLeave')], ["absent", t('didntCome')]
+            ]},
+            { val: methodF, set: (v: string) => { setMethodF(v); setPage(1); }, opts: [
+              ["all", t('allMethods')], ["face_id", "Face ID"], ["pin", "PIN"], ["manual", "Manual"], ["qr", "QR Code"]
+            ]},
+          ].map(({ val, set, opts }, i) => (
+            <select key={i} value={val} onChange={e => set(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#1A1D2E] text-[13px] text-gray-700 dark:text-gray-300 outline-none cursor-pointer">
+              {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
           ))}
-        </select>
 
-        <select
-          value={deptFilter}
-          onChange={(e) => setDeptFilter(e.target.value)}
-          style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E8EAF0", backgroundColor: "#fff", fontSize: 13, color: "#374151", outline: "none", cursor: "pointer", flex: 1, minWidth: 150 }}
-        >
-          <option value="">Barcha bo'limlar</option>
-          {departmentsList.map(dept => (
-            <option key={dept.id} value={dept.id}>{dept.name}</option>
-          ))}
-        </select>
+          <select value={userF} onChange={e => { setUserF(e.target.value); setPage(1); }}
+            className="px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#1A1D2E] text-[13px] text-gray-700 dark:text-gray-300 outline-none cursor-pointer min-w-[140px]">
+            <option value="">{t('allEmployees')}</option>
+            {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+          </select>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: "#fff", border: "1.5px solid #E8EAF0", borderRadius: 8, padding: "4px 10px" }}>
-          <label style={{ fontSize: 12, color: "#9CA3AF" }}>From:</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ border: "none", outline: "none", fontSize: 13, color: "#374151", cursor: "pointer" }} />
-        </div>
+          <select value={deptF} onChange={e => { setDeptF(e.target.value); setPage(1); }}
+            className="px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#1A1D2E] text-[13px] text-gray-700 dark:text-gray-300 outline-none cursor-pointer">
+            <option value="">{t('allDepts')}</option>
+            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: "#fff", border: "1.5px solid #E8EAF0", borderRadius: 8, padding: "4px 10px" }}>
-          <label style={{ fontSize: 12, color: "#9CA3AF" }}>To:</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ border: "none", outline: "none", fontSize: 13, color: "#374151", cursor: "pointer" }} />
+          <div className="flex items-center gap-1.5 border border-gray-200 dark:border-[#2D3148] rounded-lg px-2.5 py-1.5 bg-white dark:bg-[#1A1D2E]">
+            <span className="text-[11px] text-gray-400">{t('from')}:</span>
+            <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+              className="border-none outline-none text-[12px] text-gray-700 dark:text-gray-300 cursor-pointer bg-transparent" />
+          </div>
+          <div className="flex items-center gap-1.5 border border-gray-200 dark:border-[#2D3148] rounded-lg px-2.5 py-1.5 bg-white dark:bg-[#1A1D2E]">
+            <span className="text-[11px] text-gray-400">{t('to')}:</span>
+            <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }}
+              className="border-none outline-none text-[12px] text-gray-700 dark:text-gray-300 cursor-pointer bg-transparent" />
+          </div>
+
+          {hasFilters && (
+            <button onClick={resetFilters}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 text-[12px] bg-transparent hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+              <X size={11} />{t('clearFilters')}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Table */}
-      <div
-        style={{
-          backgroundColor: "#fff",
-          borderRadius: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      {/* ── Table ── */}
+      <div className="bg-white dark:bg-[#1A1D2E] rounded-xl border border-gray-200 dark:border-[#2D3148] shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
             <thead>
-              <tr style={{ backgroundColor: BRAND.bg, borderBottom: "1px solid #E8EAF0" }}>
-                <th style={{ padding: "12px 16px", width: 40 }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.size === displayData.length && displayData.length > 0}
-                    onChange={toggleAll}
-                    style={{ cursor: "pointer", accentColor: BRAND.primary }}
-                  />
-                </th>
-                {[
-                  { label: "Employee", col: "employee" },
-                  { label: "Date", col: "date" },
-                  { label: "Check-in" },
-                  { label: "Check-out" },
-                  { label: "Duration" },
-                  { label: "Status", col: "status" },
-                  { label: "Method" },
-                  { label: "Actions" },
-                ].map(({ label, col }) => (
-                  <th
-                    key={label}
-                    onClick={col ? () => handleSort(col) : undefined}
-                    style={{
-                      padding: "12px 16px",
-                      textAlign: "left",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "#6B7280",
-                      whiteSpace: "nowrap",
-                      cursor: col ? "pointer" : "default",
-                      userSelect: "none",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      {label}
-                      {col && <SortIcon col={col} />}
-                    </div>
-                  </th>
+              <tr className="bg-gray-50 dark:bg-white/[0.03] border-b border-gray-200 dark:border-[#2D3148]">
+                {[t('employee'), t('date'), t('checkInTime'), t('checkOutTime'), t('duration'), "Status", t('method'), ""].map(h => (
+                  <th key={h} className="px-3.5 py-3 text-left text-[11px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {paginated.map((record, i) => (
-                <tr
-                  key={record.id}
-                  style={{
-                    backgroundColor: selectedRows.has(record.id) ? "#EEF0FB" : i % 2 === 0 ? "#fff" : BRAND.bg,
-                    borderBottom: "1px solid #F3F4F6",
-                    transition: "background 0.1s",
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!selectedRows.has(record.id)) e.currentTarget.style.backgroundColor = "#F0F4FF";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!selectedRows.has(record.id)) e.currentTarget.style.backgroundColor = i % 2 === 0 ? "#fff" : BRAND.bg;
-                  }}
-                >
-                  <td style={{ padding: "12px 16px" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedRows.has(record.id)}
-                      onChange={() => toggleRow(record.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ cursor: "pointer", accentColor: BRAND.primary }}
-                    />
-                  </td>
-                  <td style={{ padding: "12px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <UserAvatar src={record.employeeAvatar} name={record.employeeName} size={32} />
+              {loading ? (
+                <tr><td colSpan={8} className="py-14 text-center">
+                  <Loader2 size={22} className="animate-spin mx-auto mb-2 text-gray-400" />
+                  <span className="text-[13px] text-gray-400">{t('loading')}</span>
+                </td></tr>
+              ) : records.length === 0 ? (
+                <tr><td colSpan={8} className="py-16 text-center">
+                  <Users size={36} className="opacity-20 mx-auto mb-3 text-gray-400" />
+                  <div className="text-[14px] font-medium text-gray-500 dark:text-gray-500">{t('noRecords')}</div>
+                  {hasFilters && <div className="text-[12px] text-gray-400 mt-1">{t('tryFilters')}</div>}
+                </td></tr>
+              ) : records.map((rec, i) => (
+                <tr key={rec.id}
+                  className={`border-b border-gray-100 dark:border-[#2D3148]/60 transition-colors hover:bg-indigo-50/40 dark:hover:bg-indigo-900/10
+                    ${i % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-white/[0.01]"}`}>
+
+                  <td className="px-3.5 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <UserAvatar src={rec.user_photo || ""} name={rec.user_name} size={28} />
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{record.employeeName}</div>
-                        <div style={{ fontSize: 11, color: "#9CA3AF" }}>{record.department}</div>
+                        <div className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">{rec.user_name}</div>
+                        <div className="text-[11px] text-gray-400 dark:text-gray-500">{rec.department_name ?? "—"}</div>
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151", whiteSpace: "nowrap" }}>
-                    {formatDate(record.date)}
+
+                  <td className="px-3.5 py-2.5 text-[13px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    {formatDate(rec.date)}
                   </td>
-                  <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500, color: record.checkIn ? "#111827" : "#D1D5DB" }}>
-                    {record.checkIn || "—"}
+
+                  <td className="px-3.5 py-2.5 text-[13px] font-semibold whitespace-nowrap text-teal-700 dark:text-teal-400">
+                    {rec.check_in ? formatTime(rec.check_in) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                   </td>
-                  <td style={{ padding: "12px 16px", fontSize: 13, color: record.checkOut ? "#111827" : "#D1D5DB" }}>
-                    {record.checkOut || "—"}
+
+                  <td className="px-3.5 py-2.5 text-[13px] whitespace-nowrap">
+                    {rec.check_out
+                      ? <span className="text-gray-700 dark:text-gray-300">{formatTime(rec.check_out)}</span>
+                      : rec.check_in
+                        ? <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">● {t('insideOffice')}</span>
+                        : <span className="text-gray-300 dark:text-gray-600">—</span>}
                   </td>
-                  <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{record.duration}</td>
-                  <td style={{ padding: "12px 16px" }}>
-                    <StatusBadge status={record.status} size="sm" />
+
+                  <td className="px-3.5 py-2.5 text-[13px] text-gray-700 dark:text-gray-300">
+                    {rec.net_seconds ? formatDuration(rec.net_seconds) : "—"}
                   </td>
-                  <td style={{ padding: "12px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      {METHOD_ICON[record.method]}
-                      <span style={{ fontSize: 12, color: "#6B7280" }}>{record.method}</span>
+
+                  <td className="px-3.5 py-2.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_CONFIG[rec.status]?.cls ?? ""}`}>
+                      {statusLabel[rec.status] ?? rec.status}
+                    </span>
+                  </td>
+
+                  <td className="px-3.5 py-2.5">
+                    <div className="flex items-center gap-1.5">
+                      {METHOD_ICON[rec.check_in_method] ?? <PenLine size={13} className="text-gray-400" />}
+                      <span className="text-[12px] text-gray-500 dark:text-gray-400">
+                        {METHOD_LABEL[rec.check_in_method] ?? rec.check_in_method}
+                      </span>
                     </div>
                   </td>
-                  <td style={{ padding: "12px 16px", position: "relative" }}>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActionOpen(actionOpen === record.id ? null : record.id); }}
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 6,
-                        border: "1px solid #E8EAF0",
-                        backgroundColor: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <MoreHorizontal size={14} color="#6B7280" />
+
+                  <td className="px-3.5 py-2.5 relative">
+                    <button onClick={e => { e.stopPropagation(); setActionOpen(actionOpen === rec.id ? null : rec.id); }}
+                      className="w-7 h-7 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-transparent flex items-center justify-center hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                      <MoreVertical size={13} className="text-gray-400" />
                     </button>
-                    {actionOpen === record.id && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          right: 0,
-                          top: "100%",
-                          backgroundColor: "#fff",
-                          border: "1px solid #E8EAF0",
-                          borderRadius: 8,
-                          boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-                          zIndex: 50,
-                          minWidth: 160,
-                          overflow: "hidden",
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {["Tahrirlash", "O'chirish", "Batafsil"].map((action) => (
-                          <button
-                            key={action}
-                            onClick={() => {
-                              setActionOpen(null);
-                              if (action === "Batafsil") {
-                                window.location.href = `/app/attendance/${record.id}`;
-                              } else if (action === "O'chirish") {
-                                if (window.confirm("Rozimisiz?")) {
-                                  apiClient.delete(`/api/v1/attendance/${record.id}/`)
-                                    .then(() => { showToast("O'chirildi"); window.location.reload(); })
-                                    .catch(() => alert("Xato"));
-                                }
-                              } else {
-                                alert("Hali ishga tushirilmadi");
-                              }
-                            }}
-                            style={{
-                              display: "block",
-                              width: "100%",
-                              padding: "9px 14px",
-                              textAlign: "left",
-                              border: "none",
-                              backgroundColor: "transparent",
-                              fontSize: 13,
-                              color: action === "O'chirish" ? "#D50000" : "#374151",
-                              cursor: "pointer",
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = BRAND.bg)}
-                            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                          >
-                            {action}
-                          </button>
-                        ))}
+                    {actionOpen === rec.id && (
+                      <div className="absolute right-2 top-full z-50 min-w-[130px] bg-white dark:bg-[#1A1D2E] border border-gray-200 dark:border-[#2D3148] rounded-xl shadow-lg overflow-hidden"
+                        onClick={e => e.stopPropagation()}>
+                        <button
+                          disabled={deleting === rec.id}
+                          onClick={() => { setActionOpen(null); handleDelete(rec.id); }}
+                          className="w-full px-4 py-2.5 text-left text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors border-0 bg-transparent cursor-pointer">
+                          {deleting === rec.id ? t('loading') : t('delete')}
+                        </button>
                       </div>
                     )}
                   </td>
@@ -557,179 +417,120 @@ export function AttendancePage() {
         </div>
 
         {/* Pagination */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "14px 16px",
-            borderTop: "1px solid #E8EAF0",
-          }}
-        >
-          <span style={{ fontSize: 12, color: "#9CA3AF" }}>
-            Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, total || displayData.length)} of {total || displayData.length} records
-          </span>
-          <div style={{ display: "flex", gap: 4 }}>
-            <button
-              disabled={page === 1}
-              onClick={() => setPage(page - 1)}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 6,
-                border: "1px solid #E8EAF0",
-                backgroundColor: "#fff",
-                fontSize: 12,
-                color: page === 1 ? "#D1D5DB" : "#374151",
-                cursor: page === 1 ? "not-allowed" : "pointer",
-              }}
-            >
-              Previous
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPage(p)}
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 6,
-                  border: "1px solid",
-                  borderColor: p === page ? BRAND.primary : "#E8EAF0",
-                  backgroundColor: p === page ? BRAND.primary : "#fff",
-                  color: p === page ? "#fff" : "#374151",
-                  fontSize: 12,
-                  fontWeight: p === page ? 600 : 400,
-                  cursor: "pointer",
-                }}
-              >
-                {p}
+        {!loading && total > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-[#2D3148]">
+            <span className="text-[12px] text-gray-400 dark:text-gray-500">
+              {(page - 1) * perPage + 1}–{Math.min(page * perPage, total)} / {total}
+            </span>
+            <div className="flex gap-1">
+              <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
+                className="w-8 h-8 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-transparent flex items-center justify-center disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                <ChevronLeft size={14} className="text-gray-600 dark:text-gray-400" />
               </button>
-            ))}
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage(page + 1)}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 6,
-                border: "1px solid #E8EAF0",
-                backgroundColor: "#fff",
-                fontSize: 12,
-                color: page === totalPages ? "#D1D5DB" : "#374151",
-                cursor: page === totalPages ? "not-allowed" : "pointer",
-              }}
-            >
-              Next
-            </button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                const p = totalPages <= 7 ? i + 1 : page <= 4 ? i + 1 : page >= totalPages - 3 ? totalPages - 6 + i : page - 3 + i;
+                return (
+                  <button key={p} onClick={() => setPage(p)}
+                    className={`w-8 h-8 rounded-lg border text-[12px] transition-colors
+                      ${p === page
+                        ? "bg-indigo-800 dark:bg-indigo-700 border-indigo-800 dark:border-indigo-700 text-white font-bold"
+                        : "border-gray-200 dark:border-[#2D3148] bg-white dark:bg-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5"}`}>
+                    {p}
+                  </button>
+                );
+              })}
+              <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
+                className="w-8 h-8 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-transparent flex items-center justify-center disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                <ChevronRight size={14} className="text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Click outside to close action menu */}
-      {actionOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 90 }} onClick={() => setActionOpen(null)} />
-      )}
-
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            backgroundColor: "#111827",
-            color: "#fff",
-            padding: "12px 20px",
-            borderRadius: 10,
-            fontSize: 13,
-            fontWeight: 500,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-            zIndex: 1000,
-          }}
-        >
-          ✓ {toast}
-        </div>
-      )}
-
-      {/* Add Record Modal */}
-      {isAddModalOpen && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ backgroundColor: "#fff", width: "100%", maxWidth: 400, borderRadius: 16, padding: 24, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" }}>
-            <h2 style={{ margin: "0 0 20px 0", fontSize: 18, color: "#111827" }}>Add Attendance Record</h2>
-            <form onSubmit={submitAddRecord} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label style={{ display: "block", fontSize: 13, marginBottom: 6, color: "#374151" }}>Employee</label>
-                <select
-                  required
-                  value={formData.user}
-                  onChange={e => setFormData({ ...formData, user: e.target.value })}
-                  style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D1D5DB" }}
-                >
-                  <option value="" disabled>Select Employee</option>
-                  {employeesList.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: 13, marginBottom: 6, color: "#374151" }}>Date</label>
-                <input
-                  type="date"
-                  required
-                  value={formData.date}
-                  onChange={e => setFormData({ ...formData, date: e.target.value })}
-                  style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D1D5DB", boxSizing: "border-box" }}
-                />
-              </div>
-              <div style={{ display: "flex", gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 13, marginBottom: 6, color: "#374151" }}>Check-in</label>
-                  <input
-                    type="time"
-                    value={formData.check_in}
-                    onChange={e => setFormData({ ...formData, check_in: e.target.value })}
-                    style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D1D5DB", boxSizing: "border-box" }}
-                  />
+      {/* ── Add Record Modal ── */}
+      {addModal && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-[1000] p-4"
+          onClick={e => { if (e.target === e.currentTarget) setAddModal(false); }}>
+          <div className="bg-white dark:bg-[#1A1D2E] w-full max-w-[420px] rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-[#2D3148]">
+              <h2 className="text-[16px] font-bold text-gray-900 dark:text-gray-100">{t('addAttendance')}</h2>
+              <button onClick={() => setAddModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 border-0 bg-transparent cursor-pointer">
+                <X size={17} />
+              </button>
+            </div>
+            <form onSubmit={handleAddRecord} className="p-5 flex flex-col gap-4">
+              {[
+                {
+                  label: `${t('employee')} *`,
+                  field: <select required value={form.user} onChange={e => setForm({ ...form, user: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#0F1117] text-[13px] text-gray-800 dark:text-gray-200 outline-none">
+                    <option value="" disabled>{t('selectEmployee')}</option>
+                    {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+                  </select>
+                },
+                {
+                  label: `${t('date')} *`,
+                  field: <input type="date" required value={form.date} max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => setForm({ ...form, date: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#0F1117] text-[13px] text-gray-800 dark:text-gray-200 outline-none" />
+                },
+              ].map(({ label, field }) => (
+                <div key={label}>
+                  <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
+                  {field}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 13, marginBottom: 6, color: "#374151" }}>Check-out</label>
-                  <input
-                    type="time"
-                    value={formData.check_out}
-                    onChange={e => setFormData({ ...formData, check_out: e.target.value })}
-                    style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D1D5DB", boxSizing: "border-box" }}
-                  />
-                </div>
+              ))}
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: `${t('checkInTime')} *`, key: "check_in", required: true },
+                  { label: t('checkOutTime'),        key: "check_out", required: false },
+                ].map(({ label, key, required }) => (
+                  <div key={key}>
+                    <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
+                    <input type="time" required={required} value={(form as any)[key]}
+                      onChange={e => setForm({ ...form, [key]: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#0F1117] text-[13px] text-gray-800 dark:text-gray-200 outline-none" />
+                  </div>
+                ))}
               </div>
+
               <div>
-                <label style={{ display: "block", fontSize: 13, marginBottom: 6, color: "#374151" }}>Method</label>
-                <select
-                  value={formData.check_in_method}
-                  onChange={e => setFormData({ ...formData, check_in_method: e.target.value })}
-                  style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D1D5DB" }}
-                >
+                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{t('method')}</label>
+                <select value={form.check_in_method} onChange={e => setForm({ ...form, check_in_method: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#0F1117] text-[13px] text-gray-800 dark:text-gray-200 outline-none">
                   <option value="manual">Manual</option>
+                  <option value="face_id">Face ID</option>
                   <option value="pin">PIN</option>
                   <option value="qr">QR Code</option>
                 </select>
               </div>
-              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #D1D5DB", backgroundColor: "#fff", cursor: "pointer" }}
-                >
-                  Cancel
+
+              <div className="flex gap-2.5 mt-1">
+                <button type="button" onClick={() => setAddModal(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-transparent text-[13px] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer">
+                  {t('cancel')}
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", backgroundColor: BRAND.primary, color: "#fff", cursor: submitting ? "not-allowed" : "pointer" }}
-                >
-                  {submitting ? "Submitting..." : "Submit"}
+                <button type="submit" disabled={submitting}
+                  className="flex-1 py-2.5 rounded-lg bg-indigo-800 dark:bg-indigo-700 text-white text-[13px] font-semibold disabled:opacity-60 hover:bg-indigo-900 dark:hover:bg-indigo-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+                  {submitting ? <><Loader2 size={13} className="animate-spin" />{t('saving')}</> : t('save')}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {actionOpen && <div className="fixed inset-0 z-40" onClick={() => setActionOpen(null)} />}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3 bg-gray-900 dark:bg-gray-800 text-white px-4 py-3 rounded-xl shadow-2xl text-[13px] font-medium max-w-sm animate-in slide-in-from-bottom-2">
+          <span className="flex-1">{toast}</span>
+          <button onClick={() => setToast(null)} className="text-gray-400 hover:text-white border-0 bg-transparent cursor-pointer p-0">
+            <X size={13} />
+          </button>
         </div>
       )}
     </div>

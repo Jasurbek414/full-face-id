@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from apps.devices.models import Device
 from .serializers import DeviceSerializer, DeviceCreateSerializer
+from apps.core.utils import get_request_company
 
 
 def _tcp_ping(host: str, port: int, timeout: float = 3.0) -> bool:
@@ -20,7 +21,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        company = getattr(self.request.user, 'company', None)
+        company = get_request_company(self.request)
         if not company:
             return Device.objects.none()
         qs = Device.objects.filter(company=company)
@@ -30,7 +31,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        company = getattr(self.request.user, 'company', None)
+        company = get_request_company(self.request)
         if not company:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Kompaniyangiz yo'q.")

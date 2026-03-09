@@ -1,240 +1,202 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
-import { Users, Clock, UserX, Timer, Camera, Scan } from "lucide-react";
-import { KPICard } from "../components/KPICard";
-import { StatusBadge } from "../components/StatusBadge";
+import { Users, Clock, UserX, Timer, Scan, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { UserAvatar } from "../components/UserAvatar";
 import { apiClient } from "../api/client";
 import { useWeeklySummary } from "../hooks/useReports";
 import { formatTime } from "../utils/time";
+import { useLanguage } from "../context/LanguageContext";
+import { useTheme } from "../context/ThemeContext";
 
-const BRAND = {
-  primary: "#1A237E",
-  accent: "#3949AB",
-  teal: "#00897B",
-  bg: "#F5F7FA",
-};
-
-const METHOD_ICON: Record<string, React.ReactNode> = {
-  "Face ID": <Scan size={12} />,
-  PIN: <span style={{ fontSize: 10 }}>PIN</span>,
-  Manual: <span style={{ fontSize: 10 }}>MNL</span>,
+const METHOD_LABEL: Record<string, string> = {
+  face_id: "Face ID", pin: "PIN", manual: "Manual", qr: "QR",
 };
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
+  const { isDark, colors } = useTheme();
   const [stats, setStats] = useState<any>(null);
   const [liveCheckins, setLiveCheckins] = useState<any[]>([]);
-  const { data: weeklyAttendanceData } = useWeeklySummary();
+  const { data: weeklyData } = useWeeklySummary();
 
   useEffect(() => {
-    // Dashboard stats
     apiClient.get("/api/v1/companies/list/stats/")
       .then(r => setStats(r.data))
-      .catch((err) => console.warn("Stats API failed:", err));
-
-    // Live check-ins
+      .catch(() => {});
     apiClient.get("/api/v1/attendance/live/")
       .then(r => setLiveCheckins(r.data.results || []))
-      .catch((err) => console.warn("Live attendance API failed:", err));
+      .catch(() => {});
   }, []);
 
-  const displayCheckIns = liveCheckins.map(r => ({
-    id: r.id,
-    name: r.user_name,
-    avatar: r.user_photo || "",
-    time: r.check_in ? formatTime(r.check_in) : "—",
-    status: r.status as any,
-    method: r.check_in_method || "Manual"
-  }));
+  const kpiCards = [
+    {
+      icon: <Users size={20} />, value: stats?.present_today ?? "—",
+      label: t('presentToday'), trend: 3.2, trendLabel: t('vsYesterday'),
+      iconClass: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300",
+      valueClass: "text-indigo-700 dark:text-indigo-300",
+    },
+    {
+      icon: <Clock size={20} />, value: stats?.late_today ?? "—",
+      label: t('lateArrivals'), trend: -8.5, trendLabel: t('vsYesterday'),
+      iconClass: "bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300",
+      valueClass: "text-orange-600 dark:text-orange-300",
+    },
+    {
+      icon: <UserX size={20} />, value: stats?.absent_today ?? "—",
+      label: t('absent'), trend: -1, trendLabel: t('vsYesterday'),
+      iconClass: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300",
+      valueClass: "text-red-600 dark:text-red-300",
+    },
+    {
+      icon: <Timer size={20} />, value: stats?.total_hours ?? "—",
+      label: t('totalHours'), trend: 2.1, trendLabel: t('thisWeek'),
+      iconClass: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300",
+      valueClass: "text-teal-700 dark:text-teal-300",
+    },
+  ];
+
+  const tooltipStyle = {
+    backgroundColor: isDark ? "#1A1D2E" : "#fff",
+    border: `1px solid ${isDark ? "#2D3148" : "#E8EAF0"}`,
+    borderRadius: 8,
+    fontSize: 12,
+    color: isDark ? "#F1F5F9" : "#111827",
+  };
+
+  const quickActions = [
+    { label: t('runReport'), emoji: "📊", to: "/app/reports", color: "text-indigo-700 dark:text-indigo-300" },
+    { label: t('viewMonitoring'), emoji: "📡", to: "/app/monitoring", color: "text-teal-700 dark:text-teal-300" },
+    { label: t('manageCameras'), emoji: "📹", to: "/app/cameras", color: "text-purple-700 dark:text-purple-300" },
+    { label: t('employeeProfiles'), emoji: "👥", to: "/app/employees", color: "text-orange-600 dark:text-orange-300" },
+  ];
 
   return (
-    <div style={{ fontFamily: "Inter, sans-serif" }}>
-      {/* Page header */}
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div className="font-sans">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Dashboard</h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>System Overview</p>
+          <h1 className="text-[22px] font-bold text-gray-900 dark:text-gray-100 m-0">
+            {t('dashboard')}
+          </h1>
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
+            {t('systemOverview')}
+          </p>
         </div>
         <button
           onClick={() => navigate("/app/attendance")}
-          style={{
-            padding: "9px 18px",
-            backgroundColor: BRAND.primary,
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-800 dark:bg-indigo-700 text-white text-[13px] font-semibold hover:bg-indigo-900 dark:hover:bg-indigo-600 transition-colors"
         >
           <Clock size={15} />
-          View Attendance
+          {t('viewAttendance')}
         </button>
       </div>
 
-      {/* KPI Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-        <KPICard
-          icon={<Users size={22} color={BRAND.primary} />}
-          value={stats?.present_today ?? "—"}
-          label="Present Today"
-          trend={3.2}
-          trendLabel="vs yesterday"
-          iconBg="#EEF0FB"
-          valueColor={BRAND.primary}
-        />
-        <KPICard
-          icon={<Clock size={22} color="#E65100" />}
-          value={stats?.late_today ?? "—"}
-          label="Late Arrivals"
-          trend={-8.5}
-          trendLabel="vs yesterday"
-          iconBg="#FFF3E0"
-          valueColor="#E65100"
-        />
-        <KPICard
-          icon={<UserX size={22} color="#B71C1C" />}
-          value={stats?.absent_today ?? "—"}
-          label="Absent"
-          trend={-1}
-          trendLabel="vs yesterday"
-          iconBg="#FFEBEE"
-          valueColor="#B71C1C"
-        />
-        <KPICard
-          icon={<Timer size={22} color={BRAND.teal} />}
-          value="1,284h"
-          label="Total Hours"
-          trend={2.1}
-          trendLabel="this week"
-          iconBg="#E0F2F1"
-          valueColor={BRAND.teal}
-        />
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        {kpiCards.map(({ icon, value, label, trend, trendLabel, iconClass, valueClass }) => (
+          <div key={label} className="bg-white dark:bg-[#1A1D2E] rounded-xl p-5 border border-gray-200 dark:border-[#2D3148] shadow-sm">
+            <div className="flex items-start justify-between">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconClass}`}>
+                {icon}
+              </div>
+              <span className={`flex items-center gap-1 text-[11px] font-semibold ${trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                {trend >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                {Math.abs(trend)}%
+              </span>
+            </div>
+            <div className={`text-3xl font-bold mt-3 ${valueClass}`}>{value}</div>
+            <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-1">{label}</div>
+            <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{trendLabel}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Charts + Live Feed */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 20 }}>
-        {/* Bar Chart */}
-        <div
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 12,
-            padding: "20px 24px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      {/* ── Chart + Live Feed ── */}
+      <div className="grid gap-5 mb-5" style={{ gridTemplateColumns: "1fr 360px" }}>
+        {/* Weekly Chart */}
+        <div className="bg-white dark:bg-[#1A1D2E] rounded-xl p-6 border border-gray-200 dark:border-[#2D3148] shadow-sm">
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>Weekly Attendance</h3>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Last 7 Days</p>
+              <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100 m-0">
+                {t('weeklyAttendance')}
+              </h3>
+              <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-1">{t('last7Days')}</p>
             </div>
-            <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
+            <div className="flex gap-4 text-[12px]">
               {[
-                { color: `rgba(26,35,126,0.7)`, label: "Present" },
-                { color: `rgba(255,109,0,0.7)`, label: "Late" },
-                { color: `rgba(213,0,0,0.6)`, label: "Absent" },
+                { color: "bg-indigo-600 dark:bg-indigo-500", label: t('present') },
+                { color: "bg-orange-500",                    label: t('late') },
+                { color: "bg-red-600 dark:bg-red-500",      label: t('absent') },
               ].map(({ color, label }) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: color }} />
-                  <span style={{ color: "#6B7280" }}>{label}</span>
+                <div key={label} className="flex items-center gap-1.5">
+                  <div className={`w-2.5 h-2.5 rounded-sm ${color} opacity-80`} />
+                  <span className="text-gray-500 dark:text-gray-400">{label}</span>
                 </div>
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={weeklyAttendanceData} barCategoryGap="30%" barGap={3}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} width={36} />
-              <Tooltip
-                contentStyle={{ borderRadius: 8, border: "1px solid #E5E7EB", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", fontSize: 12 }}
-                cursor={{ fill: "#F5F7FA" }}
-              />
-              <Bar dataKey="present" name="Present" fill="rgba(26,35,126,0.7)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="late" name="Late" fill="rgba(255,109,0,0.7)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="absent" name="Absent" fill="rgba(213,0,0,0.6)" radius={[4, 4, 0, 0]} />
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={weeklyData} barCategoryGap="32%" barGap={3}>
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#2D3148" : "#F3F4F6"} vertical={false} />
+              <XAxis dataKey="day" tick={{ fontSize: 11, fill: isDark ? "#64748B" : "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: isDark ? "#64748B" : "#9CA3AF" }} axisLine={false} tickLine={false} width={32} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: isDark ? "#ffffff08" : "#F5F7FA" }} />
+              <Bar dataKey="present" name={t('present')} fill={isDark ? "rgba(99,102,241,0.75)" : "rgba(26,35,126,0.7)"} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="late"    name={t('late')}    fill="rgba(255,109,0,0.75)"                                       radius={[4, 4, 0, 0]} />
+              <Bar dataKey="absent"  name={t('absent')}  fill={isDark ? "rgba(239,68,68,0.7)"  : "rgba(213,0,0,0.6)"}     radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         {/* Live Feed */}
-        <div
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 12,
-            padding: "20px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div className="bg-white dark:bg-[#1A1D2E] rounded-xl p-5 border border-gray-200 dark:border-[#2D3148] shadow-sm flex flex-col">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>Live Check-ins</h3>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Real-time feed</p>
+              <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100 m-0">
+                {t('liveCheckins')}
+              </h3>
+              <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-1">{t('realtimeFeed')}</p>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  backgroundColor: "#00C853",
-                  animation: "pulse 2s infinite",
-                }}
-              />
-              <span style={{ fontSize: 11, color: "#00C853", fontWeight: 600 }}>LIVE</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[11px] text-green-500 font-bold">LIVE</span>
             </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-            {displayCheckIns.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", marginTop: 20 }}>No check-ins yet today.</div>
-            ) : displayCheckIns.map((item, i) => (
-              <div
-                key={item.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 10px",
-                  borderRadius: 8,
-                  backgroundColor: i % 2 === 0 ? "#fff" : "#F9FAFB",
-                  transition: "background 0.1s",
-                  cursor: "pointer",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#EEF0FB")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = i % 2 === 0 ? "#fff" : "#F9FAFB")}
+          <div className="flex flex-col gap-0.5 flex-1">
+            {liveCheckins.length === 0 ? (
+              <div className="text-[13px] text-gray-400 dark:text-gray-500 text-center py-8">
+                {t('noCheckins')}
+              </div>
+            ) : liveCheckins.map((item, i) => (
+              <div key={item.id}
+                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors
+                  ${i % 2 === 0 ? "bg-transparent" : "bg-gray-50 dark:bg-white/[0.03]"}
+                  hover:bg-indigo-50 dark:hover:bg-indigo-900/20`}
               >
-                <UserAvatar src={item.avatar} name={item.name} size={34} status="inside" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {item.name}
+                <UserAvatar src={item.user_photo || ""} name={item.user_name} size={32} status="inside" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate">
+                    {item.user_name}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 1 }}>
-                    <Camera size={10} color="#9CA3AF" />
-                    <span style={{ fontSize: 11, color: "#9CA3AF" }}>{item.method}</span>
+                  <div className="text-[11px] text-gray-400 dark:text-gray-500">
+                    {METHOD_LABEL[item.check_in_method] || item.check_in_method}
                   </div>
                 </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{item.time}</div>
-                  <div style={{ marginTop: 2 }}>
-                    <StatusBadge status={item.status} size="sm" />
+                <div className="text-right shrink-0">
+                  <div className="text-[13px] font-semibold text-gray-700 dark:text-gray-300">
+                    {item.check_in ? formatTime(item.check_in) : "—"}
+                  </div>
+                  <div className={`text-[10px] font-semibold mt-0.5 ${
+                    item.status === "on_time" ? "text-emerald-600 dark:text-emerald-400" :
+                    item.status === "late"    ? "text-orange-500" : "text-gray-400"
+                  }`}>
+                    {item.status === "on_time" ? t('onTime') : item.status === "late" ? t('late') : item.status}
                   </div>
                 </div>
               </div>
@@ -243,171 +205,94 @@ export function DashboardPage() {
 
           <button
             onClick={() => navigate("/app/attendance")}
-            style={{
-              marginTop: 12,
-              width: "100%",
-              padding: "8px",
-              borderRadius: 8,
-              border: `1.5px solid #E8EAF0`,
-              backgroundColor: "#fff",
-              color: BRAND.accent,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
+            className="mt-3 w-full py-2 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-transparent text-indigo-700 dark:text-indigo-400 text-[12px] font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
           >
-            View All Records →
+            {t('viewAllRecords')}
           </button>
         </div>
       </div>
 
-      {/* Bottom row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginTop: 20 }}>
-        {/* Department breakdown */}
-        <div
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 12,
-            padding: "20px 24px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>By Department</h3>
-          {(stats?.department_breakdown || []).map((item: any, idx: number) => {
+      {/* ── Bottom Row ── */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* By Department */}
+        <div className="bg-white dark:bg-[#1A1D2E] rounded-xl p-5 border border-gray-200 dark:border-[#2D3148] shadow-sm">
+          <h3 className="text-[14px] font-bold text-gray-900 dark:text-gray-100 mb-4">
+            {t('byDepartment')}
+          </h3>
+          {(stats?.department_breakdown || []).length === 0 ? (
+            <div className="text-[13px] text-gray-400 dark:text-gray-500 text-center py-4">{t('noData')}</div>
+          ) : (stats?.department_breakdown || []).map((item: any, idx: number) => {
             const present = item.present || 0;
-            const total = item.total || 0;
-            const dept = item.department_name || item.dept || "Unknown";
-            const color = [BRAND.primary, BRAND.teal, "#8E24AA", "#F57C00", "#2E7D32"][idx % 5];
+            const total   = item.total   || 1;
+            const dept    = item.department_name || item.dept || "—";
+            const pct     = Math.round((present / total) * 100);
+            const palette = ["bg-indigo-600", "bg-teal-600", "bg-purple-600", "bg-orange-500", "bg-emerald-600"];
             return (
-              <div key={dept} style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: "#374151" }}>{dept}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{present}/{total}</span>
+              <div key={dept} className="mb-3">
+                <div className="flex justify-between text-[12px] mb-1">
+                  <span className="text-gray-700 dark:text-gray-300 truncate max-w-[140px]">{dept}</span>
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">{present}/{total}</span>
                 </div>
-                <div style={{ height: 6, backgroundColor: "#F3F4F6", borderRadius: 3 }}>
-                  <div
-                    style={{
-                      height: "100%",
-                      width: total > 0 ? `${(present / total) * 100}%` : "0%",
-                      backgroundColor: color,
-                      borderRadius: 3,
-                      opacity: 0.8,
-                    }}
-                  />
+                <div className="h-1.5 bg-gray-100 dark:bg-[#2D3148] rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${palette[idx % palette.length]} opacity-80 transition-all`}
+                    style={{ width: `${pct}%` }} />
                 </div>
               </div>
             );
           })}
-          {(!stats?.department_breakdown || stats.department_breakdown.length === 0) && (
-            <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center" }}>No data available</div>
-          )}
         </div>
 
-        {/* Check-in methods */}
-        <div
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 12,
-            padding: "20px 24px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>Check-in Methods</h3>
-          {(stats?.checkin_methods || []).map((item: any, idx: number) => {
-            const method = item.method || item.name || "Unknown";
+        {/* Check-in Methods */}
+        <div className="bg-white dark:bg-[#1A1D2E] rounded-xl p-5 border border-gray-200 dark:border-[#2D3148] shadow-sm">
+          <h3 className="text-[14px] font-bold text-gray-900 dark:text-gray-100 mb-4">
+            {t('checkinMethods')}
+          </h3>
+          {(stats?.checkin_methods || []).length === 0 ? (
+            <div className="text-[13px] text-gray-400 dark:text-gray-500 text-center py-4">{t('noData')}</div>
+          ) : (stats?.checkin_methods || []).map((item: any, idx: number) => {
+            const methodName = item.method || item.name || "—";
             const count = item.count || 0;
-            const pct = item.pct || item.percentage || 0;
-            const color = [BRAND.primary, BRAND.teal, "#9CA3AF"][idx % 3];
-            const icon = method === "Face ID" ? <Scan size={14} /> : null;
+            const pct   = item.pct || item.percentage || 0;
+            const paletteBg   = ["bg-indigo-100 dark:bg-indigo-900/40", "bg-teal-100 dark:bg-teal-900/40", "bg-gray-100 dark:bg-gray-700"];
+            const paletteText = ["text-indigo-700 dark:text-indigo-300", "text-teal-700 dark:text-teal-300", "text-gray-600 dark:text-gray-400"];
+            const paletteBar  = ["bg-indigo-600", "bg-teal-600", "bg-gray-400"];
             return (
-              <div key={method} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 8,
-                    backgroundColor: `${color}18`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  {icon || <span style={{ fontSize: 11, fontWeight: 700, color }}>{method.slice(0, 1)}</span>}
+              <div key={methodName} className="flex items-center gap-3 mb-3">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 ${paletteBg[idx % 3]} ${paletteText[idx % 3]}`}>
+                  {methodName === "Face ID" ? <Scan size={16} /> : <span>{methodName.slice(0, 2).toUpperCase()}</span>}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, color: "#374151" }}>{method}</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{count} ({pct}%)</span>
+                <div className="flex-1">
+                  <div className="flex justify-between text-[12px] mb-1">
+                    <span className="text-gray-700 dark:text-gray-300">{methodName}</span>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">{count} ({pct}%)</span>
                   </div>
-                  <div style={{ height: 6, backgroundColor: "#F3F4F6", borderRadius: 3 }}>
-                    <div style={{ height: "100%", width: `${pct}%`, backgroundColor: color, borderRadius: 3, opacity: 0.75 }} />
+                  <div className="h-1.5 bg-gray-100 dark:bg-[#2D3148] rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${paletteBar[idx % 3]} opacity-75`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               </div>
             );
           })}
-          {(!stats?.checkin_methods || stats.checkin_methods.length === 0) && (
-            <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center" }}>No data available</div>
-          )}
         </div>
 
-        {/* Quick actions */}
-        <div
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 12,
-            padding: "20px 24px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          }}
-        >
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 16px" }}>Quick Actions</h3>
-          {[
-            { label: "Run Attendance Report", icon: "📊", to: "/app/reports", color: BRAND.primary },
-            { label: "View Live Monitoring", icon: "📡", to: "/app/monitoring", color: BRAND.teal },
-            { label: "Manage Cameras", icon: "📹", to: "/app/cameras", color: "#8E24AA" },
-            { label: "Employee Profiles", icon: "👥", to: "/app/employees", color: "#F57C00" },
-          ].map(({ label, icon, to, color }) => (
+        {/* Quick Actions */}
+        <div className="bg-white dark:bg-[#1A1D2E] rounded-xl p-5 border border-gray-200 dark:border-[#2D3148] shadow-sm">
+          <h3 className="text-[14px] font-bold text-gray-900 dark:text-gray-100 mb-4">
+            {t('quickActions')}
+          </h3>
+          {quickActions.map(({ label, emoji, to, color }) => (
             <button
               key={label}
               onClick={() => navigate(to)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid #E8EAF0",
-                backgroundColor: "#fff",
-                cursor: "pointer",
-                marginBottom: 8,
-                textAlign: "left",
-                transition: "all 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#F5F7FA";
-                e.currentTarget.style.borderColor = color;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#fff";
-                e.currentTarget.style.borderColor = "#E8EAF0";
-              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-transparent mb-2 cursor-pointer text-left hover:bg-gray-50 dark:hover:bg-white/5 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group"
             >
-              <span style={{ fontSize: 18 }}>{icon}</span>
-              <span style={{ fontSize: 13, color: "#374151" }}>{label}</span>
-              <span style={{ marginLeft: "auto", color: "#9CA3AF", fontSize: 12 }}>→</span>
+              <span className="text-lg">{emoji}</span>
+              <span className={`text-[13px] flex-1 ${color}`}>{label}</span>
+              <span className="text-gray-400 dark:text-gray-600 text-[12px] group-hover:translate-x-0.5 transition-transform">→</span>
             </button>
           ))}
         </div>
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
     </div>
   );
 }

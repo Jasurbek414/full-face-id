@@ -23,6 +23,7 @@ from .serializers import (
 )
 from rest_framework_simplejwt.tokens import RefreshToken
 from apps.notifications.providers.eskiz import EskizSMSProvider
+from apps.core.utils import get_request_company
 import random
 import string
 
@@ -501,7 +502,7 @@ class CompanyUsersView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        company = getattr(request.user, 'company', None)
+        company = get_request_company(request)
         if not company:
             return Response({'results': [], 'count': 0})
         users = User.objects.filter(

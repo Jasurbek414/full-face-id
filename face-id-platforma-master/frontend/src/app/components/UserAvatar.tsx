@@ -13,34 +13,20 @@ export function UserAvatar({ src, name, size = 36, online, status }: UserAvatarP
     status === "inside" ? "#00C853" : status === "outside" ? "#1976D2" : online ? "#00C853" : undefined;
 
   return (
-    <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+    <span className="relative inline-flex shrink-0">
       <img
         src={src}
         alt={name}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: "50%",
-          objectFit: "cover",
-          border: "2px solid #fff",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
-        }}
+        className="rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm"
+        style={{ width: size, height: size }}
         onError={(e) => {
           (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=3949AB&color=fff&size=${size}`;
         }}
       />
       {dotColor && (
         <span
-          style={{
-            position: "absolute",
-            bottom: 1,
-            right: 1,
-            width: size > 40 ? 12 : 9,
-            height: size > 40 ? 12 : 9,
-            borderRadius: "50%",
-            backgroundColor: dotColor,
-            border: "2px solid #fff",
-          }}
+          className={`absolute bottom-0.5 right-0.5 rounded-full border-2 border-white dark:border-slate-800 ${size > 40 ? "w-3 h-3" : "w-2.5 h-2.5"}`}
+          style={{ backgroundColor: dotColor }}
         />
       )}
     </span>

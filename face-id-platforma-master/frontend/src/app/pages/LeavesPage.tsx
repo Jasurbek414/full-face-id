@@ -1,16 +1,12 @@
 import React, { useState } from "react";
-import { Plus, X, Calendar as CalendarIcon, FileText } from "lucide-react";
+import { Plus, X, Calendar as CalendarIcon, FileText, Info, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { StatusBadge } from "../components/StatusBadge";
 import { useLeaveBalance, useLeaveRequests, useLeaveTypes } from "../hooks/useLeaves";
 import { leavesAPI } from "../api/leaves";
-
-const BRAND = {
-    primary: "#1A237E",
-    teal: "#00897B",
-    bg: "#F5F7FA",
-};
+import { useLanguage } from "../context/LanguageContext";
 
 export function LeavesPage() {
+    const { t } = useLanguage();
     const { balance, loading: loadingBalance, refetch: refetchBalance } = useLeaveBalance();
     const { requests, loading: loadingRequests, refetch: refetchRequests } = useLeaveRequests();
     const { types } = useLeaveTypes();
@@ -27,111 +23,224 @@ export function LeavesPage() {
             setFormData({ leave_type: "", start_date: "", end_date: "", reason: "" });
             refetchBalance();
             refetchRequests();
+            alert(t('requestSubmitted'));
         } catch (error) {
             console.error(error);
-            alert("Error submitting request");
+            alert(t('errorSubmitting'));
         } finally {
             setSubmitting(false);
         }
     };
 
     return (
-        <div style={{ fontFamily: "Inter, sans-serif" }}>
-            <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Header section */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Leaves</h1>
-                    <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>Manage your leave balances and requests.</p>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{t('leaves')}</h1>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('leavesSubtitle')}</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    style={{
-                        display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8,
-                        border: "none", backgroundColor: BRAND.primary, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                    }}
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all active:scale-95 group"
                 >
-                    <Plus size={16} /> New Request
+                    <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300" />
+                    {t('newRequest')}
                 </button>
             </div>
 
-            {/* Balance Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginBottom: 24 }}>
-                {loadingBalance ? <p>Loading limits...</p> : balance.map((b: any) => (
-                    <div key={b.name} style={{ backgroundColor: "#fff", padding: 20, borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-                        <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 500, marginBottom: 8 }}>{b.name}</div>
-                        <div style={{ fontSize: 28, fontWeight: 700, color: BRAND.primary }}>{b.remaining_days} <span style={{ fontSize: 14, color: "#9CA3AF", fontWeight: 500 }}>left</span></div>
-                        <div style={{ marginTop: 12, height: 6, backgroundColor: "#E8EAF0", borderRadius: 3, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${(b.used_days / b.max_days_per_year) * 100}%`, backgroundColor: BRAND.teal }} />
+            {/* Balance Cards Group */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {loadingBalance ? (
+                    Array(4).fill(0).map((_, i) => (
+                        <div key={i} className="h-32 bg-white dark:bg-slate-800 rounded-2xl animate-pulse border border-slate-100 dark:border-slate-700/50"></div>
+                    ))
+                ) : balance.map((b: any) => (
+                    <div key={b.name} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow group">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{b.name}</span>
+                            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-500">
+                                <Info size={16} />
+                            </div>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6B7280", marginTop: 8 }}>
-                            <span>Used: {b.used_days}</span>
-                            <span>Total: {b.max_days_per_year}</span>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="text-3xl font-black text-slate-900 dark:text-white">{b.remaining_days}</span>
+                            <span className="text-xs font-bold text-slate-400 tracking-wide uppercase">{t('left')}</span>
+                        </div>
+                        
+                        <div className="mt-4 space-y-2">
+                            <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-indigo-500 rounded-full transition-all duration-1000" 
+                                    style={{ width: `${Math.min((b.used_days / b.max_days_per_year) * 100, 100)}%` }}
+                                />
+                            </div>
+                            <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter">
+                                <span className="text-slate-500 dark:text-slate-400">{t('used')}: {b.used_days}</span>
+                                <span className="text-slate-400 dark:text-slate-500">{t('total')}: {b.max_days_per_year}</span>
+                            </div>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* Requests Table */}
-            <div style={{ backgroundColor: "#fff", borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                        <tr style={{ backgroundColor: BRAND.bg, borderBottom: "1px solid #E8EAF0" }}>
-                            {["Type", "Start Date", "End Date", "Days", "Reason", "Status"].map((h) => (
-                                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#6B7280" }}>{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loadingRequests ? <tr><td colSpan={6} style={{ padding: 16 }}>Loading requests...</td></tr> : requests.map((req: any, i) => (
-                            <tr key={req.id} style={{ borderBottom: "1px solid #F3F4F6", backgroundColor: i % 2 === 0 ? "#fff" : BRAND.bg }}>
-                                <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500, color: "#111827" }}>{req.leave_type_name}</td>
-                                <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{req.start_date}</td>
-                                <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{req.end_date}</td>
-                                <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{req.days}</td>
-                                <td style={{ padding: "12px 16px", fontSize: 13, color: "#6B7280", maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{req.reason}</td>
-                                <td style={{ padding: "12px 16px" }}><StatusBadge status={req.status} size="sm" /></td>
+            {/* Requests Table section */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-700/50">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{t('recentRecords')}</h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50/50 dark:bg-slate-900/20">
+                                {['leaveType', 'startDate', 'endDate', 'days', 'reason', 'status'].map((key) => (
+                                    <th key={key} className="px-6 py-4 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                        {t(key)}
+                                    </th>
+                                ))}
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {loadingRequests ? (
+                                <tr>
+                                    <td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-400 italic">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <div className="w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
+                                            {t('loading')}...
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : requests.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <Clock size={32} className="text-slate-200 dark:text-slate-700" />
+                                            <span className="text-sm font-medium">{t('noData')}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : requests.map((req: any, i) => (
+                                <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm font-bold text-slate-700 dark:text-slate-200">{req.leave_type_name}</div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm text-slate-600 dark:text-slate-400 font-medium">{req.start_date}</div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm text-slate-600 dark:text-slate-400 font-medium">{req.end_date}</div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold">
+                                            {req.days} {t('days')}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="text-xs text-slate-500 dark:text-slate-500 max-w-[200px] truncate font-medium" title={req.reason}>
+                                            {req.reason}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <StatusBadge status={req.status} size="sm" />
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            {/* Modal */}
+            {/* Modal Replacement */}
             {isModalOpen && (
-                <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(2px)" }}>
-                    <div style={{ backgroundColor: "#fff", width: "100%", maxWidth: 400, borderRadius: 16, padding: 24, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                            <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: "#111827" }}>New Leave Request</h2>
-                            <button onClick={() => setIsModalOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={20} /></button>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{t('newLeaveRequest')}</h3>
+                            <button 
+                                onClick={() => setIsModalOpen(false)} 
+                                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                            <div>
-                                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 6 }}>Leave Type</label>
-                                <select required value={formData.leave_type} onChange={e => setFormData({ ...formData, leave_type: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 14 }}>
-                                    <option value="" disabled>Select a type</option>
+                        {/* Modal Body */}
+                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">{t('leaveType')}</label>
+                                <select 
+                                    required 
+                                    value={formData.leave_type} 
+                                    onChange={e => setFormData({ ...formData, leave_type: e.target.value })} 
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                >
+                                    <option value="" disabled>{t('selectType')}</option>
                                     {types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
                                 </select>
                             </div>
 
-                            <div style={{ display: "flex", gap: 12 }}>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 6 }}><CalendarIcon size={12} style={{ marginRight: 4 }} /> Start</label>
-                                    <input type="date" required value={formData.start_date} onChange={e => setFormData({ ...formData, start_date: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 14 }} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                        <CalendarIcon size={12} className="text-indigo-500" /> {t('startDate')}
+                                    </label>
+                                    <input 
+                                        type="date" 
+                                        required 
+                                        value={formData.start_date} 
+                                        onChange={e => setFormData({ ...formData, start_date: e.target.value })} 
+                                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" 
+                                    />
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 6 }}><CalendarIcon size={12} style={{ marginRight: 4 }} /> End</label>
-                                    <input type="date" required value={formData.end_date} onChange={e => setFormData({ ...formData, end_date: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 14 }} />
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                        <CalendarIcon size={12} className="text-indigo-500" /> {t('endDate')}
+                                    </label>
+                                    <input 
+                                        type="date" 
+                                        required 
+                                        value={formData.end_date} 
+                                        onChange={e => setFormData({ ...formData, end_date: e.target.value })} 
+                                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" 
+                                    />
                                 </div>
                             </div>
 
-                            <div>
-                                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 6 }}><FileText size={12} style={{ marginRight: 4 }} /> Reason</label>
-                                <textarea required rows={3} value={formData.reason} onChange={e => setFormData({ ...formData, reason: e.target.value })} placeholder="Why do you need this leave?" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 14, resize: "none" }} />
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                    <FileText size={12} className="text-indigo-500" /> {t('reason')}
+                                </label>
+                                <textarea 
+                                    required 
+                                    rows={3} 
+                                    value={formData.reason} 
+                                    onChange={e => setFormData({ ...formData, reason: e.target.value })} 
+                                    placeholder={t('whyNeedLeave')} 
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
+                                />
                             </div>
 
-                            <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-                                <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #D1D5DB", background: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", color: "#374151" }}>Cancel</button>
-                                <button type="submit" disabled={submitting} style={{ flex: 1, padding: "10px", borderRadius: 8, border: "none", background: BRAND.primary, color: "#fff", fontSize: 14, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>{submitting ? "Submitting..." : "Submit Request"}</button>
+                            <div className="flex items-center gap-3 pt-4">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsModalOpen(false)} 
+                                    className="flex-1 px-4 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+                                >
+                                    {t('cancel')}
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    disabled={submitting} 
+                                    className="flex-[2] px-4 py-2.5 text-sm font-bold text-white bg-indigo-600 border border-transparent rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {submitting ? (
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <CheckCircle2 size={18} />
+                                    )}
+                                    {submitting ? t('saving') : t('submitRequest')}
+                                </button>
                             </div>
                         </form>
                     </div>

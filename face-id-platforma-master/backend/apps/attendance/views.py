@@ -6,41 +6,126 @@ from rest_framework.response import Response
 from django.db.models import Count, Q, Sum
 
 from .models import AttendanceRecord, BreakRecord
-from .serializers import AttendanceRecordSerializer, CheckInSerializer, BulkAbsentSerializer
+from .serializers import AttendanceRecordSerializer, CheckInSerializer, BulkAbsentSerializer, ManualAttendanceCreateSerializer
 from .services import determine_attendance_status, calculate_net_seconds
 from apps.schedules.models import UserSchedule
+from apps.core.utils import get_request_company
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     queryset = AttendanceRecord.objects.filter(is_deleted=False)
     serializer_class = AttendanceRecordSerializer
 
     def get_queryset(self):
-        company = getattr(self.request.user, 'company', None)
+        company = get_request_company(self.request)
         if not company:
             return self.queryset.none()
         qs = self.queryset.filter(company=company)
-        date_from = self.request.query_params.get('date_from')
-        date_to = self.request.query_params.get('date_to')
-        status_filter = self.request.query_params.get('status')
-        if date_from:
-            qs = qs.filter(date__gte=date_from)
-        if date_to:
-            qs = qs.filter(date__lte=date_to)
-        if status_filter:
-            qs = qs.filter(status=status_filter)
+        p = self.request.query_params
+        if p.get('date_from'):
+            qs = qs.filter(date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(date__lte=p['date_to'])
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('user_id'):
+            qs = qs.filter(user_id=p['user_id'])
+        if p.get('department'):
+            qs = qs.filter(user__department_id=p['department'])
+        if p.get('method'):
+            qs = qs.filter(check_in_method=p['method'])
+        if p.get('search'):
+            qs = qs.filter(
+                Q(user__first_name__icontains=p['search']) |
+                Q(user__last_name__icontains=p['search'])
+            )
         return qs.order_by('-date', '-check_in')
+
+    def create(self, request, *args, **kwargs):
+        import datetime
+        company = get_request_company(request)
+        if not company:
+            return Response({'detail': 'Kompaniya topilmadi.'}, status=status.HTTP_403_FORBIDDEN)
+
+        ser = ManualAttendanceCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        from apps.accounts.models import User
+        try:
+            user = User.objects.get(id=d['user'], company=company, is_active=True)
+        except User.DoesNotExist:
+            return Response({'detail': 'Xodim topilmadi.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_date = d['date']
+        if AttendanceRecord.objects.filter(user=user, date=target_date, is_deleted=False).exists():
+            return Response({'detail': 'Bu sana uchun yozuv allaqachon mavjud.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        tz = timezone.get_current_timezone()
+        check_in_dt = timezone.make_aware(datetime.datetime.combine(target_date, d['check_in']), tz)
+        att_status, late_secs = determine_attendance_status(user, check_in_dt)
+
+        check_out_dt = None
+        net_sec = None
+        if d.get('check_out'):
+            check_out_dt = timezone.make_aware(datetime.datetime.combine(target_date, d['check_out']), tz)
+            net_sec = calculate_net_seconds(check_in_dt, check_out_dt, [])
+
+        record = AttendanceRecord.objects.create(
+            user=user,
+            company=company,
+            date=target_date,
+            check_in=check_in_dt,
+            check_out=check_out_dt,
+            status=att_status,
+            late_seconds=late_secs,
+            net_seconds=net_sec,
+            check_in_method=d.get('check_in_method', 'manual'),
+        )
+
+        out_ser = AttendanceRecordSerializer(record, context={'request': request})
+        return Response(out_ser.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='today-stats')
+    def today_stats(self, request):
+        company = get_request_company(request)
+        if not company:
+            return Response({'detail': 'Company not found.'}, status=status.HTTP_403_FORBIDDEN)
+
+        today = timezone.now().date()
+        qs = AttendanceRecord.objects.filter(company=company, date=today, is_deleted=False)
+        stats = qs.aggregate(
+            present=Count('id', filter=Q(status__in=['on_time', 'late', 'early_leave'])),
+            late=Count('id', filter=Q(status='late')),
+            on_time=Count('id', filter=Q(status='on_time')),
+            on_site=Count('id', filter=Q(check_in__isnull=False, check_out__isnull=True)),
+        )
+        from apps.accounts.models import User
+        total_employees = User.objects.filter(company=company, is_active=True).count()
+        present = stats['present'] or 0
+        return Response({
+            'total_employees': total_employees,
+            'present': present,
+            'late': stats['late'] or 0,
+            'on_time': stats['on_time'] or 0,
+            'on_site': stats['on_site'] or 0,
+            'absent': max(total_employees - present, 0),
+        })
 
     @action(detail=False, methods=['post'], url_path='check-in')
     def check_in(self, request):
+        company = get_request_company(request)
+        if not company:
+            return Response({'detail': 'Kompaniyangiz yo\'q.'}, status=status.HTTP_403_FORBIDDEN)
+
         today = timezone.now().date()
         record = AttendanceRecord.objects.filter(user=request.user, date=today, is_deleted=False).first()
         if record and record.check_in:
             return Response({'message': 'Already checked in for today'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         serializer = CheckInSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         method = serializer.validated_data.get('method', 'manual')
-        
+
         now = timezone.now()
         att_status, late_secs = determine_attendance_status(request.user, now)
         
@@ -50,7 +135,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if not record:
             record = AttendanceRecord.objects.create(
                 user=request.user,
-                company=request.user.company,
+                company=company,
                 date=today,
                 check_in=now,
                 status=att_status,

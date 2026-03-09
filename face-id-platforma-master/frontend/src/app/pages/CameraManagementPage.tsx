@@ -4,8 +4,8 @@ import {
   AlertTriangle, CheckCircle2, Loader2, Network, ScanFace, Copy, Check,
 } from "lucide-react";
 import { devicesAPI } from "../api/devices";
-
-const BRAND = { primary: "#1A237E", accent: "#3949AB", teal: "#00897B", bg: "#F5F7FA" };
+import { useLanguage } from "../context/LanguageContext";
+import { useTheme } from "../context/ThemeContext";
 
 type Tab = "cameras" | "face_id";
 type DeviceType = "camera" | "face_id";
@@ -44,26 +44,29 @@ const emptyForm = {
 };
 
 function StatusDot({ status }: { status: string }) {
-  const color =
-    status === "online" ? "#10B981" : status === "offline" ? "#EF4444" : "#9CA3AF";
-  const label =
-    status === "online" ? "Online" : status === "offline" ? "Offline" : "Noma'lum";
+  const { t } = useLanguage();
+  const isOnline = status === "online";
+  const isOffline = status === "offline";
+  
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <div
-        style={{
-          width: 8, height: 8, borderRadius: "50%", backgroundColor: color,
-          boxShadow: status === "online" ? `0 0 6px ${color}` : "none",
-        }}
-      />
-      <span style={{ fontSize: 12, color, fontWeight: 600 }}>{label}</span>
+    <div className="flex items-center gap-2">
+      <div className={`w-2 h-2 rounded-full ${
+        isOnline ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : 
+        isOffline ? "bg-rose-500" : "bg-slate-400"
+      }`} />
+      <span className={`text-xs font-semibold ${
+        isOnline ? "text-emerald-600 dark:text-emerald-400" : 
+        isOffline ? "text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"
+      }`}>
+        {isOnline ? "Online" : isOffline ? "Offline" : t('unknown')}
+      </span>
     </div>
   );
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 ml-1">
       {children}
     </label>
   );
@@ -82,13 +85,11 @@ function StyledInput({
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      style={{
-        width: "100%", boxSizing: "border-box", border: "1.5px solid #E5E7EB",
-        borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#111827",
-        outline: "none", backgroundColor: disabled ? "#F5F7FA" : "#fff",
-      }}
-      onFocus={(e) => !disabled && (e.target.style.borderColor = "#3949AB")}
-      onBlur={(e) => (e.target.style.borderColor = "#E5E7EB")}
+      className={`w-full px-3 py-2.5 text-sm rounded-xl border transition-all outline-none
+        ${disabled 
+          ? "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400" 
+          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+        }`}
     />
   );
 }
@@ -103,11 +104,7 @@ function StyledSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      style={{
-        width: "100%", boxSizing: "border-box", border: "1.5px solid #E5E7EB",
-        borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#111827",
-        outline: "none", backgroundColor: "#fff", cursor: "pointer",
-      }}
+      className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-all outline-none focus:border-indigo-500 dark:focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
     >
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
@@ -116,17 +113,15 @@ function StyledSelect({
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.06em",
-      textTransform: "uppercase", marginBottom: 12, paddingBottom: 8,
-      borderBottom: "1px solid #F3F4F6",
-    }}>
+    <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
       {children}
     </div>
   );
 }
 
 export function CameraManagementPage() {
+  const { t, lang } = useLanguage();
+  const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>("cameras");
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(false);
@@ -169,8 +164,8 @@ export function CameraManagementPage() {
     setForm((f) => ({ ...f, [key]: v }));
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) { setFormError("Qurilma nomi kiritilishi shart."); return; }
-    if (!form.ip_address.trim()) { setFormError("IP manzil kiritilishi shart."); return; }
+    if (!form.name.trim()) { setFormError(t('deviceNameRequired') || "Qurilma nomi kiritilishi shart."); return; }
+    if (!form.ip_address.trim()) { setFormError(t('ipRequired') || "IP manzil kiritilishi shart."); return; }
     setSubmitting(true);
     setFormError("");
     try {
@@ -194,7 +189,7 @@ export function CameraManagementPage() {
       setFormError(
         typeof d === "object"
           ? Object.values(d).flat().join(" ")
-          : "Xatolik yuz berdi."
+          : t('errorOccurred')
       );
     } finally {
       setSubmitting(false);
@@ -211,7 +206,7 @@ export function CameraManagementPage() {
       );
     } catch {
       setTestResult((p) => ({
-        ...p, [device.id]: { success: false, detail: "Server xatoligi." },
+        ...p, [device.id]: { success: false, detail: t('serverError') || "Server xatoligi." },
       }));
     } finally {
       setTestingId(null);
@@ -219,13 +214,13 @@ export function CameraManagementPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Qurilmani o'chirishni tasdiqlaysizmi?")) return;
+    if (!window.confirm(t('confirmDeleteDevice'))) return;
     setDeletingId(id);
     try {
       await devicesAPI.delete(id);
       setDevices((p) => p.filter((d) => d.id !== id));
     } catch {
-      alert("O'chirishda xatolik yuz berdi.");
+      alert(t('errorOccurred'));
     } finally {
       setDeletingId(null);
     }
@@ -238,51 +233,41 @@ export function CameraManagementPage() {
   };
 
   return (
-    <div style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="animate-in fade-in duration-500">
       {/* Header */}
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>
-            Qurilmalar boshqaruvi
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            {t('devicesManagement')}
           </h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
-            Kameralar va Yuz ID qurilmalarini ulash va boshqarish
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            {t('devicesSubtitle')}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div className="flex items-center gap-3">
           <button
             onClick={fetchDevices}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "9px 16px", borderRadius: 8, border: "1.5px solid #E5E7EB",
-              background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-95"
           >
-            <RefreshCw size={15} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} />
-            Yangilash
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            {t('refresh')}
           </button>
           <button
             onClick={() => openModal(activeTab === "cameras" ? "camera" : "face_id")}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "9px 16px", borderRadius: 8, border: "none",
-              background: `linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.accent} 100%)`,
-              color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(26,35,126,0.25)",
-            }}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20 transition-all active:scale-95 border-none cursor-pointer"
           >
-            <Plus size={15} />
-            {activeTab === "cameras" ? "Kamera qo'shish" : "Yuz ID qo'shish"}
+            <Plus size={18} />
+            {activeTab === "cameras" ? t('addCamera') : t('addFaceId')}
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid #E5E7EB" }}>
-        {([
-          { id: "cameras" as Tab, label: "Kameralar", icon: Camera },
-          { id: "face_id" as Tab, label: "Yuz ID qurilmalari", icon: ScanFace },
-        ]).map(({ id, label, icon: Icon }) => {
+      <div className="flex gap-2 mb-6 border-b border-slate-200 dark:border-slate-800">
+        {[
+          { id: "cameras" as Tab, label: t('cameras'), icon: Camera },
+          { id: "face_id" as Tab, label: t('faceIdDevices'), icon: ScanFace },
+        ].map(({ id, label, icon: Icon }) => {
           const active = activeTab === id;
           const count = devices.filter((d) =>
             id === "cameras" ? d.device_type === "camera" : d.device_type === "face_id"
@@ -291,24 +276,16 @@ export function CameraManagementPage() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "10px 18px", border: "none", cursor: "pointer",
-                background: "none", fontSize: 14, fontWeight: active ? 700 : 500,
-                color: active ? BRAND.primary : "#6B7280",
-                borderBottom: active ? `2px solid ${BRAND.primary}` : "2px solid transparent",
-                marginBottom: -1,
-              }}
+              className={`flex items-center gap-2.5 px-6 py-3 text-sm font-bold transition-all relative border-none bg-transparent cursor-pointer
+                ${active ? "text-indigo-600 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"}`}
             >
-              <Icon size={16} />
+              <Icon size={18} />
               {label}
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 20,
-                background: active ? BRAND.primary : "#E5E7EB",
-                color: active ? "#fff" : "#6B7280",
-              }}>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold
+                ${active ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400" : "bg-slate-100 dark:bg-slate-800 text-slate-500"}`}>
                 {count}
               </span>
+              {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 dark:bg-indigo-500 rounded-full" />}
             </button>
           );
         })}
@@ -316,34 +293,29 @@ export function CameraManagementPage() {
 
       {/* Device list */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: 60, color: "#9CA3AF" }}>
-          <Loader2 size={28} style={{ animation: "spin 1s linear infinite" }} />
-          <div style={{ marginTop: 12, fontSize: 13 }}>Yuklanmoqda...</div>
+        <div className="flex flex-col items-center justify-center py-24 text-slate-400 dark:text-slate-600">
+          <Loader2 size={32} className="animate-spin mb-4" />
+          <p className="text-sm font-medium">{t('loading')}</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 20px", background: "#fff", borderRadius: 12, border: "1.5px dashed #E5E7EB" }}>
-          {activeTab === "cameras" ? <Camera size={40} color="#D1D5DB" /> : <ScanFace size={40} color="#D1D5DB" />}
-          <div style={{ marginTop: 16, fontSize: 15, fontWeight: 600, color: "#374151" }}>
-            Hali {activeTab === "cameras" ? "kamera" : "Yuz ID qurilmasi"} qo'shilmagan
+        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800">
+          <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4">
+            {activeTab === "cameras" ? <Camera size={32} className="text-slate-300" /> : <ScanFace size={32} className="text-slate-300" />}
           </div>
-          <div style={{ marginTop: 8, fontSize: 13, color: "#9CA3AF" }}>
-            Yuqoridagi tugmani bosib yangi qurilma qo'shing
-          </div>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{t('noDevices')}</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-xs mb-8">
+            {t('addFirstDevice')}
+          </p>
           <button
             onClick={() => openModal(activeTab === "cameras" ? "camera" : "face_id")}
-            style={{
-              marginTop: 20, display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "10px 20px", borderRadius: 8, border: "none",
-              background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-              color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-            }}
+            className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-all active:scale-95 border-none cursor-pointer"
           >
-            <Plus size={15} />
-            {activeTab === "cameras" ? "Kamera qo'shish" : "Yuz ID qo'shish"}
+            <Plus size={18} />
+            {activeTab === "cameras" ? t('addCamera') : t('addFaceId')}
           </button>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filtered.map((device) => (
             <DeviceCard
               key={device.id}
@@ -360,110 +332,79 @@ export function CameraManagementPage() {
         </div>
       )}
 
-      {/* Add Device Modal */}
+      {/* Modal */}
       {showModal && (
-        <div
-          style={{
-            position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            zIndex: 1000, padding: 20,
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
-        >
-          <div
-            style={{
-              background: "#fff", borderRadius: 16, width: "100%", maxWidth: 560,
-              maxHeight: "92vh", overflowY: "auto",
-              boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
-            }}
-          >
-            {/* Modal header */}
-            <div style={{
-              padding: "18px 24px", borderBottom: "1px solid #E5E7EB",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              position: "sticky", top: 0, background: "#fff", zIndex: 1,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                  background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.teal})`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  {form.device_type === "camera" ? <Camera size={18} color="#fff" /> : <ScanFace size={18} color="#fff" />}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
+                  {form.device_type === "camera" ? <Camera size={20} /> : <ScanFace size={20} />}
                 </div>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>
-                    {form.device_type === "camera" ? "Kamera qo'shish" : "Yuz ID qurilma qo'shish"}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                    Tarmoq ma'lumotlarini to'ldirib ulanishni tekshiring
-                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                    {form.device_type === "camera" ? t('addCamera') : t('addFaceId')}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('networkSettings')}</p>
                 </div>
               </div>
-              <button
+              <button 
                 onClick={() => setShowModal(false)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}
+                className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-none bg-transparent cursor-pointer"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ padding: 24 }}>
-              {/* Basic info */}
-              <SectionTitle>Asosiy ma'lumotlar</SectionTitle>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+            <div className="p-6 max-h-[75vh] overflow-y-auto">
+              {/* Basic Section */}
+              <SectionTitle>{t('profileData')}</SectionTitle>
+              <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
-                  <FieldLabel>Qurilma nomi *</FieldLabel>
-                  <StyledInput value={form.name} onChange={setField("name")} placeholder="Kirish kamerasi 1" />
+                  <FieldLabel>{t('deviceName')} *</FieldLabel>
+                  <StyledInput value={form.name} onChange={setField("name")} placeholder="..." />
                 </div>
                 <div>
-                  <FieldLabel>Joylashuv</FieldLabel>
-                  <StyledInput value={form.location} onChange={setField("location")} placeholder="1-qavat, asosiy kirish" />
+                  <FieldLabel>{t('location')}</FieldLabel>
+                  <StyledInput value={form.location} onChange={setField("location")} placeholder="..." />
                 </div>
               </div>
 
-              {/* Network */}
-              <SectionTitle>Tarmoq sozlamalari</SectionTitle>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-                <div>
-                  <FieldLabel>IP manzil *</FieldLabel>
+              {/* Network Section */}
+              <SectionTitle>{t('networkSettings')}</SectionTitle>
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="col-span-1">
+                  <FieldLabel>{t('ipAddress')} *</FieldLabel>
                   <StyledInput value={form.ip_address} onChange={setField("ip_address")} placeholder="192.168.1.100" />
                 </div>
-                <div>
-                  <FieldLabel>Port</FieldLabel>
-                  <StyledInput
-                    value={form.port}
-                    onChange={setField("port")}
-                    placeholder={form.device_type === "camera" ? "554 (RTSP)" : "80 (HTTP)"}
-                    type="number"
-                  />
+                <div className="col-span-1">
+                  <FieldLabel>{t('port')}</FieldLabel>
+                  <StyledInput value={form.port} onChange={setField("port")} type="number" placeholder={form.device_type === "camera" ? "554" : "80"} />
                 </div>
-                <div>
-                  <FieldLabel>MAC manzil</FieldLabel>
-                  <StyledInput value={form.mac_address} onChange={setField("mac_address")} placeholder="AA:BB:CC:DD:EE:FF" />
+                <div className="col-span-1">
+                  <FieldLabel>{t('macAddress')}</FieldLabel>
+                  <StyledInput value={form.mac_address} onChange={setField("mac_address")} placeholder="00:00:00..." />
                 </div>
                 {form.device_type === "camera" && (
-                  <div>
-                    <FieldLabel>RTSP URL</FieldLabel>
-                    <StyledInput
-                      value={form.rtsp_url}
-                      onChange={setField("rtsp_url")}
-                      placeholder="rtsp://192.168.1.100:554/stream1"
-                    />
+                  <div className="col-span-1">
+                    <FieldLabel>{t('rtspUrl')}</FieldLabel>
+                    <StyledInput value={form.rtsp_url} onChange={setField("rtsp_url")} placeholder="rtsp://..." />
                   </div>
                 )}
               </div>
 
-              {/* Device login */}
-              <SectionTitle>Qurilma login ma'lumotlari</SectionTitle>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+              {/* Login Section */}
+              <SectionTitle>{t('deviceLogin')}</SectionTitle>
+              <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
-                  <FieldLabel>Login (username)</FieldLabel>
+                  <FieldLabel>{t('username')}</FieldLabel>
                   <StyledInput value={form.device_username} onChange={setField("device_username")} placeholder="admin" />
                 </div>
                 <div>
-                  <FieldLabel>Parol</FieldLabel>
-                  <div style={{ position: "relative" }}>
+                  <FieldLabel>{t('password')}</FieldLabel>
+                  <div className="relative">
                     <StyledInput
                       type={showPassword ? "text" : "password"}
                       value={form.device_password}
@@ -473,90 +414,73 @@ export function CameraManagementPage() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                        background: "none", border: "none", cursor: "pointer", color: "#9CA3AF",
-                      }}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 border-none bg-transparent cursor-pointer"
                     >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Settings */}
-              <SectionTitle>Qurilma sozlamalari</SectionTitle>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-                <div>
-                  <FieldLabel>Tekshiruv turi</FieldLabel>
+              {/* Advanced Section */}
+              <SectionTitle>{t('deviceSettings')}</SectionTitle>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="col-span-1">
+                  <FieldLabel>{t('checkType')}</FieldLabel>
                   <StyledSelect
                     value={form.check_type}
                     onChange={setField("check_type")}
                     options={[
-                      { value: "both", label: "Kirish & Chiqish" },
-                      { value: "entry", label: "Faqat kirish" },
-                      { value: "exit", label: "Faqat chiqish" },
+                      { value: "both", label: t('both') },
+                      { value: "entry", label: t('entryOnly') },
+                      { value: "exit", label: t('exitOnly') },
                     ]}
                   />
                 </div>
                 {form.device_type === "face_id" && (
-                  <div>
-                    <FieldLabel>Yuz aniqlash chegarasi: {Number(form.face_threshold).toFixed(2)}</FieldLabel>
+                  <div className="col-span-1">
+                    <FieldLabel>{t('faceThreshold')}: {Number(form.face_threshold).toFixed(2)}</FieldLabel>
                     <input
                       type="range" min="0.4" max="0.9" step="0.05"
                       value={form.face_threshold}
                       onChange={(e) => setField("face_threshold")(e.target.value)}
-                      style={{ width: "100%", marginTop: 8, accentColor: BRAND.primary }}
+                      className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9CA3AF" }}>
-                      <span>Yumshoq (0.4)</span><span>Qattiq (0.9)</span>
+                    <div className="flex justify-between text-[10px] text-slate-400 font-bold mt-1.5 px-1 uppercase tracking-tighter">
+                      <span>{t('soft')}</span><span>{t('strict')}</span>
                     </div>
                   </div>
                 )}
               </div>
 
               {formError && (
-                <div style={{
-                  background: "#FEF2F2", border: "1px solid #FECACA",
-                  borderRadius: 8, padding: "10px 14px", color: "#DC2626",
-                  fontSize: 13, marginBottom: 16, display: "flex", alignItems: "center", gap: 8,
-                }}>
-                  <AlertTriangle size={14} /> {formError}
+                <div className="p-3 mb-6 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle size={14} className="flex-shrink-0" />
+                  {formError}
                 </div>
               )}
+            </div>
 
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                <button
-                  onClick={() => setShowModal(false)}
-                  style={{
-                    padding: "10px 20px", borderRadius: 8, border: "1.5px solid #E5E7EB",
-                    background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}
-                >
-                  Bekor qilish
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  style={{
-                    padding: "10px 24px", borderRadius: 8, border: "none",
-                    background: submitting ? "#9CA3AF" : `linear-gradient(135deg, ${BRAND.primary}, ${BRAND.accent})`,
-                    color: "#fff", fontSize: 13, fontWeight: 700,
-                    cursor: submitting ? "not-allowed" : "pointer",
-                    display: "flex", alignItems: "center", gap: 8,
-                    boxShadow: submitting ? "none" : "0 2px 8px rgba(26,35,126,0.3)",
-                  }}
-                >
-                  {submitting && <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />}
-                  Saqlash
-                </button>
-              </div>
+            {/* Modal Footer */}
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-6 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors border-none bg-transparent cursor-pointer"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex items-center gap-2 px-8 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 border-none cursor-pointer"
+              >
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
+                {t('save')}
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -573,32 +497,23 @@ function DeviceCard({
   onDelete: () => void;
   onCopy: (key: string) => void;
 }) {
+  const { t, lang } = useLanguage();
   const isCamera = device.device_type === "camera";
 
   return (
-    <div style={{
-      background: "#fff", borderRadius: 12, border: "1px solid #E8EAF0",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.06)", overflow: "hidden",
-    }}>
-      {/* Top */}
-      <div style={{
-        padding: "14px 16px", display: "flex", alignItems: "center",
-        justifyContent: "space-between", borderBottom: "1px solid #F3F4F6",
-        background: "linear-gradient(135deg, #F8F9FF 0%, #F0F2FF 100%)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-            background: `linear-gradient(135deg, #1A237E, #00897B)`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            {isCamera ? <Camera size={18} color="#fff" /> : <ScanFace size={18} color="#fff" />}
+    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 dark:hover:shadow-indigo-500/5 transition-all group">
+      {/* Card Header */}
+      <div className="p-4 flex items-center justify-between border-b border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-600/10 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
+            {isCamera ? <Camera size={20} /> : <ScanFace size={20} />}
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{device.name}</div>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-none">{device.name}</h4>
             {device.location && (
-              <div style={{ fontSize: 12, color: "#6B7280", display: "flex", alignItems: "center", gap: 3 }}>
-                <MapPin size={11} /> {device.location}
+              <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-500 font-medium">
+                <MapPin size={10} />
+                {device.location}
               </div>
             )}
           </div>
@@ -606,112 +521,95 @@ function DeviceCard({
         <StatusDot status={device.connection_status} />
       </div>
 
-      {/* Network info grid */}
-      <div style={{ padding: "12px 16px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+      <div className="p-5">
+        <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-5">
           {[
-            { label: "IP manzil", value: device.ip_address || "—" },
-            { label: "Port", value: device.port != null ? String(device.port) : "—" },
-            { label: "MAC manzil", value: device.mac_address || "—" },
-            {
-              label: "Tekshiruv",
-              value: device.check_type === "both" ? "Kirish & Chiqish"
-                : device.check_type === "entry" ? "Kirish" : "Chiqish",
+            { label: t('ipAddress'), value: device.ip_address || "—" },
+            { label: t('port'), value: device.port != null ? String(device.port) : "—" },
+            { label: t('macAddress'), value: device.mac_address || "—" },
+            { 
+              label: t('checkType'), 
+              value: device.check_type === "both" ? t('both') : device.check_type === "entry" ? t('entryOnly') : t('exitOnly') 
             },
           ].map(({ label, value }) => (
             <div key={label}>
-              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{label}</div>
-              <div style={{ fontSize: 13, color: "#374151", fontWeight: 500, marginTop: 2 }}>{value}</div>
+              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{label}</span>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mt-0.5 truncate">{value}</p>
             </div>
           ))}
         </div>
 
         {isCamera && device.rtsp_url && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>RTSP URL</div>
-            <div style={{
-              fontSize: 11, color: "#6B7280", fontFamily: "monospace",
-              background: "#F5F7FA", padding: "5px 8px", borderRadius: 6, marginTop: 4,
-              wordBreak: "break-all",
-            }}>
+          <div className="mb-5 p-2 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter px-1">{t('rtspUrl')}</span>
+            <p className="text-[10px] font-mono text-slate-600 dark:text-slate-400 mt-1 break-all line-clamp-2 px-1 leading-relaxed">
               {device.rtsp_url}
-            </div>
+            </p>
           </div>
         )}
 
-        {/* API Key */}
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginBottom: 4 }}>API Kalit</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{
-              flex: 1, fontSize: 11, fontFamily: "monospace", color: "#6B7280",
-              background: "#F5F7FA", padding: "5px 8px", borderRadius: 6,
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>
-              {device.api_key.slice(0, 24)}…
-            </div>
+        {/* API Key Section */}
+        <div className="mb-5">
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{t('apiKey')}</span>
+          <div className="flex items-center gap-2 mt-1.5 p-2 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+            <code className="flex-1 text-[10px] font-mono text-slate-500 overflow-hidden whitespace-nowrap text-ellipsis">
+              {device.api_key.slice(0, 20)}••••••••
+            </code>
             <button
               onClick={() => onCopy(device.api_key)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}
-              title="Nusxa olish"
+              className="p-1 px-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-700 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors border-none bg-transparent cursor-pointer"
+              title={t('copy')}
             >
-              {copiedKey === device.api_key ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+              {copiedKey === device.api_key ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
             </button>
           </div>
         </div>
 
-        {/* Test result banner */}
+        {/* Test Result Feedback */}
         {testResult && (
-          <div style={{
-            padding: "8px 12px", borderRadius: 8, marginBottom: 12, fontSize: 12,
-            background: testResult.success ? "#F0FDF4" : "#FEF2F2",
-            border: `1px solid ${testResult.success ? "#A7F3D0" : "#FECACA"}`,
-            color: testResult.success ? "#059669" : "#DC2626",
-            display: "flex", alignItems: "center", gap: 6,
-          }}>
-            {testResult.success ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-            {testResult.detail}
+          <div className={`mb-5 p-3 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 ${
+            testResult.success 
+              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20" 
+              : "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20"
+          }`}>
+            <div className={`p-1.5 rounded-lg ${testResult.success ? "bg-emerald-100 dark:bg-emerald-500/20" : "bg-rose-100 dark:bg-rose-500/20"}`}>
+              {testResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+            </div>
+            <p className="text-xs font-bold leading-tight flex-1">{testResult.detail}</p>
           </div>
         )}
 
-        {device.last_ping && (
-          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12 }}>
-            Oxirgi tekshiruv: {new Date(device.last_ping).toLocaleString("uz-UZ")}
-          </div>
+        {device.last_ping && !testResult && (
+          <p className="text-[10px] font-medium text-slate-400 mb-5 px-1 tracking-tight italic">
+            {t('lastCheck')}: {new Date(device.last_ping).toLocaleString(lang === 'uz' ? 'uz-UZ' : lang === 'ru' ? 'ru' : 'en-US')}
+          </p>
         )}
 
-        {/* Action buttons */}
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Action Buttons */}
+        <div className="flex gap-2.5">
           <button
             onClick={onTest}
             disabled={testing}
-            style={{
-              flex: 1, padding: "8px 0", borderRadius: 8,
-              border: `1.5px solid #3949AB`, background: "#fff",
-              color: "#3949AB", fontSize: 12, fontWeight: 700,
-              cursor: testing ? "not-allowed" : "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            }}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-bold transition-all border-none cursor-pointer
+              bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed group active:scale-95"
           >
-            {testing
-              ? <><Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Tekshirilmoqda...</>
-              : <><Network size={13} /> Ulanishni tekshirish</>
-            }
+            {testing ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Network size={14} />
+            )}
+            {testing ? t('testingConnection') : t('testConnection')}
           </button>
           <button
             onClick={onDelete}
             disabled={deleting}
-            style={{
-              width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-              border: "1.5px solid #FECACA", background: "#fff",
-              color: "#DC2626", cursor: deleting ? "not-allowed" : "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
+            className="w-11 h-11 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 transition-all border-none bg-transparent cursor-pointer active:scale-90 shadow-sm"
           >
-            {deleting
-              ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
-              : <Trash2 size={13} />
-            }
+            {deleting ? (
+              <Loader2 size={14} className="animate-spin text-rose-500" />
+            ) : (
+              <Trash2 size={18} />
+            )}
           </button>
         </div>
       </div>

@@ -11,6 +11,7 @@ import json
 
 from apps.accounts.models import User
 from apps.attendance.models import AttendanceRecord
+from apps.core.utils import get_request_company
 from .serializers import (
     DailyReportSerializer, MonthlyReportSerializer,
     SummaryReportSerializer, LateAnalysisSerializer
@@ -20,7 +21,7 @@ class ReportViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def _get_company_users(self, request):
-        company = getattr(request.user, 'company', None)
+        company = get_request_company(request)
         if not company:
             return User.objects.none()
         qs = User.objects.filter(company=company, is_active=True)
@@ -142,7 +143,7 @@ class ReportViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
-        company = getattr(request.user, 'company', None)
+        company = get_request_company(request)
         if not company:
             return Response({'total_employees': 0, 'present': 0, 'absent': 0, 'late': 0, 'on_time': 0, 'average_attendance_rate': 0.0})
 

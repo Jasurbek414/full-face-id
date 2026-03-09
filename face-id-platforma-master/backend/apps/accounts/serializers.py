@@ -15,15 +15,20 @@ class UserSerializer(serializers.ModelSerializer):
     company = CompanySerializer(read_only=True)
     full_name = serializers.CharField(source='get_full_name', read_only=True)
     system_role = serializers.SerializerMethodField()
+    role = serializers.PrimaryKeyRelatedField(read_only=True)
+    role_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'phone', 'email', 'first_name', 'last_name', 'full_name', 'photo', 'system_role', 'company', 'must_change_pw')
+        fields = ('id', 'phone', 'email', 'first_name', 'last_name', 'full_name', 'photo', 'system_role', 'role', 'role_name', 'company', 'must_change_pw')
 
     def get_system_role(self, obj):
         if obj.is_superuser:
             return 'admin'
         return 'employee'
+
+    def get_role_name(self, obj):
+        return obj.role.name if obj.role else None
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])

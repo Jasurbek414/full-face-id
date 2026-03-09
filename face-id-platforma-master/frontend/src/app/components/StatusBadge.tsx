@@ -25,33 +25,18 @@ const configs: Record<string, { label: string; bg: string; color: string; dot: s
 
 export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
   const cfg = configs[status] || configs["off"];
-  const padding = size === "sm" ? "3px 8px" : "4px 10px";
-  const fontSize = size === "sm" ? "11px" : "12px";
-  const dotSize = size === "sm" ? "5px" : "6px";
-
+  
   return (
     <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "5px",
-        backgroundColor: cfg.bg,
-        color: cfg.color,
-        padding,
-        borderRadius: "100px",
-        fontSize,
-        fontWeight: 500,
-        whiteSpace: "nowrap",
-      }}
+      className={`
+        inline-flex items-center gap-1.5 rounded-full font-medium whitespace-nowrap
+        ${size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"}
+      `}
+      style={{ backgroundColor: cfg.bg, color: cfg.color }}
     >
       <span
-        style={{
-          width: dotSize,
-          height: dotSize,
-          borderRadius: "50%",
-          backgroundColor: cfg.dot,
-          flexShrink: 0,
-        }}
+        className={`rounded-full shrink-0 ${size === "sm" ? "w-1.5 h-1.5" : "w-1.5 h-1.5"}`}
+        style={{ backgroundColor: cfg.dot }}
       />
       {cfg.label}
     </span>

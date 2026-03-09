@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.models import User
+from apps.core.utils import get_request_company
 from apps.roles.models import CustomRole
 from apps.schedules.models import WorkSchedule, UserSchedule
 from apps.attendance.models import AttendanceRecord
@@ -19,7 +20,9 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        company = self.request.user.company
+        company = get_request_company(self.request)
+        if not company:
+            return User.objects.none()
         return User.objects.filter(company=company, is_active=True).order_by('first_name', 'last_name')
 
     def get_serializer_class(self):

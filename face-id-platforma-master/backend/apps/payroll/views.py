@@ -6,18 +6,19 @@ from .models import SalaryConfig, PayrollRecord
 from .serializers import SalaryConfigSerializer, PayrollRecordSerializer
 from .services import calculate_payroll
 from apps.accounts.models import User
+from apps.core.utils import get_request_company
 
 class SalaryConfigViewSet(viewsets.ModelViewSet):
     serializer_class = SalaryConfigSerializer
 
     def get_queryset(self):
-        company = getattr(self.request.user, 'company', None)
+        company = get_request_company(self.request)
         if not company:
             return SalaryConfig.objects.none()
         return SalaryConfig.objects.filter(company=company, is_deleted=False)
 
     def perform_create(self, serializer):
-        company = getattr(self.request.user, 'company', None)
+        company = get_request_company(self.request)
         if not company:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Kompaniyangiz yo'q.")
@@ -28,7 +29,7 @@ class PayrollViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        company = getattr(user, 'company', None)
+        company = get_request_company(self.request)
         if not company:
             return PayrollRecord.objects.none()
         qs = PayrollRecord.objects.filter(company=company, is_deleted=False)
