@@ -289,6 +289,39 @@ class MobileFaceCheckInView(APIView):
         return Response(AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK)
 
 
+class EnrolledFacesView(APIView):
+    """List all employees who have a face encoding registered, for this company."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        encodings = (
+            FaceEncoding.objects
+            .filter(company=request.user.company)
+            .select_related('user', 'user__department')
+            .order_by('-updated_at')
+        )
+        data = []
+        for fe in encodings:
+            u = fe.user
+            dept = getattr(u, 'department', None)
+            photo_url = None
+            if getattr(u, 'photo', None):
+                try:
+                    photo_url = request.build_absolute_uri(u.photo.url)
+                except Exception:
+                    pass
+            data.append({
+                'user_id': str(u.id),
+                'full_name': u.get_full_name() or u.phone,
+                'phone': u.phone,
+                'department': dept.name if dept else None,
+                'photo_url': photo_url,
+                'enrolled_at': fe.created_at.isoformat(),
+                'updated_at': fe.updated_at.isoformat(),
+            })
+        return Response({'count': len(data), 'results': data})
+
+
 class EmployeeFaceView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

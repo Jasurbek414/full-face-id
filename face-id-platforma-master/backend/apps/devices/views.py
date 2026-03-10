@@ -42,6 +42,26 @@ class DeviceViewSet(viewsets.ModelViewSet):
             return DeviceCreateSerializer
         return DeviceSerializer
 
+    @action(detail=True, methods=['get'], url_path='logs')
+    def logs(self, request, pk=None):
+        """Return face attempt logs for this device."""
+        from apps.face.models import FaceAttempt
+        device = self.get_object()
+        qs = FaceAttempt.objects.filter(device=device).select_related('user').order_by('-created_at')[:500]
+        data = []
+        for a in qs:
+            u = a.user
+            data.append({
+                'id': str(a.id),
+                'user_id': str(u.id) if u else None,
+                'user_name': (u.get_full_name() or u.phone) if u else None,
+                'user_phone': u.phone if u else None,
+                'distance': round(float(a.distance), 4),
+                'success': a.success,
+                'created_at': a.created_at.isoformat(),
+            })
+        return Response({'count': len(data), 'results': data})
+
     @action(detail=True, methods=['post'], url_path='test-connection')
     def test_connection(self, request, pk=None):
         """Test TCP connection to device IP:port and update connection_status."""

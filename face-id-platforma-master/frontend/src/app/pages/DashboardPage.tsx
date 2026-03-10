@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Users, Clock, UserX, Timer, Scan, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Users, Clock, UserX, Timer, Scan, ArrowUpRight, ArrowDownRight, BarChart3, Activity, Camera, ChevronRight } from "lucide-react";
 import { UserAvatar } from "../components/UserAvatar";
 import { apiClient } from "../api/client";
 import { useWeeklySummary } from "../hooks/useReports";
@@ -28,8 +28,9 @@ export function DashboardPage() {
     apiClient.get("/api/v1/companies/list/stats/")
       .then(r => setStats(r.data))
       .catch(() => {});
-    apiClient.get("/api/v1/attendance/live/")
-      .then(r => setLiveCheckins(r.data.results || []))
+    const today = new Date().toISOString().slice(0, 10);
+    apiClient.get(`/api/v1/attendance/?date_from=${today}&date_to=${today}`)
+      .then(r => setLiveCheckins((r.data.results || r.data || []).slice(0, 8)))
       .catch(() => {});
   }, []);
 
@@ -53,7 +54,7 @@ export function DashboardPage() {
       valueClass: "text-red-600 dark:text-red-300",
     },
     {
-      icon: <Timer size={20} />, value: stats?.total_hours ?? "—",
+      icon: <Timer size={20} />, value: stats?.total_hours != null ? `${stats.total_hours}h` : "—",
       label: t('totalHours'), trend: 2.1, trendLabel: t('thisWeek'),
       iconClass: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300",
       valueClass: "text-teal-700 dark:text-teal-300",
@@ -69,10 +70,10 @@ export function DashboardPage() {
   };
 
   const quickActions = [
-    { label: t('runReport'), emoji: "📊", to: "/app/reports", color: "text-indigo-700 dark:text-indigo-300" },
-    { label: t('viewMonitoring'), emoji: "📡", to: "/app/monitoring", color: "text-teal-700 dark:text-teal-300" },
-    { label: t('manageCameras'), emoji: "📹", to: "/app/cameras", color: "text-purple-700 dark:text-purple-300" },
-    { label: t('employeeProfiles'), emoji: "👥", to: "/app/employees", color: "text-orange-600 dark:text-orange-300" },
+    { label: t('runReport'),       icon: <BarChart3 size={17} />, to: "/app/reports",    iconCls: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300",  labelCls: "text-indigo-700 dark:text-indigo-300" },
+    { label: t('viewMonitoring'),  icon: <Activity  size={17} />, to: "/app/monitoring", iconCls: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300",         labelCls: "text-teal-700 dark:text-teal-300" },
+    { label: t('manageCameras'),   icon: <Camera    size={17} />, to: "/app/cameras",    iconCls: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300", labelCls: "text-purple-700 dark:text-purple-300" },
+    { label: t('employeeProfiles'),icon: <Users     size={17} />, to: "/app/employees",  iconCls: "bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300", labelCls: "text-orange-600 dark:text-orange-300" },
   ];
 
   return (
@@ -179,7 +180,7 @@ export function DashboardPage() {
                   ${i % 2 === 0 ? "bg-transparent" : "bg-gray-50 dark:bg-white/[0.03]"}
                   hover:bg-indigo-50 dark:hover:bg-indigo-900/20`}
               >
-                <UserAvatar src={item.user_photo || ""} name={item.user_name} size={32} status="inside" />
+                <UserAvatar src={item.user_photo || ""} name={item.user_name} size={32} status={item.check_in && !item.check_out ? "inside" : "outside"} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 truncate">
                     {item.user_name}
@@ -193,10 +194,15 @@ export function DashboardPage() {
                     {item.check_in ? formatTime(item.check_in) : "—"}
                   </div>
                   <div className={`text-[10px] font-semibold mt-0.5 ${
-                    item.status === "on_time" ? "text-emerald-600 dark:text-emerald-400" :
-                    item.status === "late"    ? "text-orange-500" : "text-gray-400"
+                    item.status === "on_time"    ? "text-emerald-600 dark:text-emerald-400" :
+                    item.status === "late"       ? "text-orange-500" :
+                    item.status === "absent"     ? "text-red-500" :
+                    item.status === "early_leave"? "text-yellow-500" : "text-gray-400"
                   }`}>
-                    {item.status === "on_time" ? t('onTime') : item.status === "late" ? t('late') : item.status}
+                    {item.status === "on_time"     ? t('onTime') :
+                     item.status === "late"        ? t('late') :
+                     item.status === "absent"      ? t('absent') :
+                     item.status === "early_leave" ? t('earlyLeave') : item.status}
                   </div>
                 </div>
               </div>
@@ -280,15 +286,17 @@ export function DashboardPage() {
           <h3 className="text-[14px] font-bold text-gray-900 dark:text-gray-100 mb-4">
             {t('quickActions')}
           </h3>
-          {quickActions.map(({ label, emoji, to, color }) => (
+          {quickActions.map(({ label, icon, to, iconCls, labelCls }) => (
             <button
               key={label}
               onClick={() => navigate(to)}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-transparent mb-2 cursor-pointer text-left hover:bg-gray-50 dark:hover:bg-white/5 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-transparent mb-2 cursor-pointer text-left hover:bg-gray-50 dark:hover:bg-white/5 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group"
             >
-              <span className="text-lg">{emoji}</span>
-              <span className={`text-[13px] flex-1 ${color}`}>{label}</span>
-              <span className="text-gray-400 dark:text-gray-600 text-[12px] group-hover:translate-x-0.5 transition-transform">→</span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconCls}`}>
+                {icon}
+              </div>
+              <span className={`text-[13px] font-medium flex-1 ${labelCls}`}>{label}</span>
+              <ChevronRight size={14} className="text-gray-400 dark:text-gray-600 group-hover:translate-x-0.5 transition-transform" />
             </button>
           ))}
         </div>

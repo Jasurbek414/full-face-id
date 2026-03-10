@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Search, Download, Scan, Hash, PenLine, LogOut, Clock,
+  Search, Download, Scan, Hash, PenLine,
   ChevronLeft, ChevronRight, MoreVertical, Plus, Users,
-  UserCheck, AlertCircle, UserX, X, Loader2,
+  UserCheck, AlertCircle, UserX, X, Loader2, Clock,
 } from "lucide-react";
 import { UserAvatar } from "../components/UserAvatar";
 import { apiClient } from "../api/client";
@@ -42,13 +42,12 @@ export function AttendancePage() {
   const { t }      = useLanguage();
   const { isDark } = useTheme();
 
-  const [records, setRecords]         = useState<AttendanceRecord[]>([]);
-  const [total, setTotal]             = useState(0);
-  const [loading, setLoading]         = useState(true);
-  const [todayRecord, setTodayRecord] = useState<any>(null);
-  const [todayStats, setTodayStats]   = useState<TodayStats | null>(null);
-  const [employees, setEmployees]     = useState<Employee[]>([]);
-  const [departments, setDepts]       = useState<Department[]>([]);
+  const [records, setRecords]       = useState<AttendanceRecord[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [loading, setLoading]       = useState(true);
+  const [todayStats, setTodayStats] = useState<TodayStats | null>(null);
+  const [employees, setEmployees]   = useState<Employee[]>([]);
+  const [departments, setDepts]     = useState<Department[]>([]);
 
   const [search, setSearch]     = useState("");
   const [statusF, setStatusF]   = useState("all");
@@ -65,22 +64,15 @@ export function AttendancePage() {
   const [addModal, setAddModal]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting]     = useState<string | null>(null);
-  const [checkingIn, setCheckingIn] = useState(false);
-  const [checkingOut, setCheckingOut] = useState(false);
 
   const [form, setForm] = useState({
     user: "", date: new Date().toISOString().slice(0, 10),
-    check_in: "", check_out: "", check_in_method: "manual",
+    check_in: "", check_out: "", check_in_method: "face_id",
   });
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
-  }, []);
-
-  const loadTodayRecord = useCallback(async () => {
-    try { setTodayRecord((await apiClient.get("/api/v1/attendance/today/")).data); }
-    catch { setTodayRecord(null); }
   }, []);
 
   const loadTodayStats = useCallback(async () => {
@@ -92,13 +84,13 @@ export function AttendancePage() {
     setLoading(true);
     try {
       const params: Record<string, any> = { page };
-      if (search)           params.search     = search;
-      if (statusF !== "all") params.status    = statusF;
-      if (methodF !== "all") params.method    = methodF;
-      if (userF)             params.user_id   = userF;
-      if (deptF)             params.department = deptF;
-      if (dateFrom)          params.date_from = dateFrom;
-      if (dateTo)            params.date_to   = dateTo;
+      if (search)            params.search      = search;
+      if (statusF !== "all") params.status      = statusF;
+      if (methodF !== "all") params.method      = methodF;
+      if (userF)             params.user_id     = userF;
+      if (deptF)             params.department  = deptF;
+      if (dateFrom)          params.date_from   = dateFrom;
+      if (dateTo)            params.date_to     = dateTo;
       const r = await apiClient.get("/api/v1/attendance/", { params });
       setRecords(r.data.results ?? r.data ?? []);
       setTotal(r.data.count ?? 0);
@@ -107,36 +99,12 @@ export function AttendancePage() {
   }, [page, search, statusF, methodF, userF, deptF, dateFrom, dateTo, showToast]);
 
   useEffect(() => {
-    loadTodayRecord(); loadTodayStats();
+    loadTodayStats();
     apiClient.get("/api/v1/employees/").then(r => setEmployees(r.data.results ?? r.data ?? [])).catch(() => {});
     apiClient.get("/api/v1/companies/departments/").then(r => setDepts(r.data.results ?? r.data ?? [])).catch(() => {});
-  }, [loadTodayRecord, loadTodayStats]);
+  }, [loadTodayStats]);
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
-
-  const handleCheckIn = async () => {
-    setCheckingIn(true);
-    try {
-      await apiClient.post("/api/v1/attendance/check-in/", { method: "manual" });
-      showToast(t('checkInSuccess'));
-      await Promise.all([loadTodayRecord(), loadTodayStats(), loadRecords()]);
-    } catch (e: any) {
-      const d = e.response?.data;
-      showToast(d?.detail || d?.message || "Xatolik");
-    } finally { setCheckingIn(false); }
-  };
-
-  const handleCheckOut = async () => {
-    setCheckingOut(true);
-    try {
-      await apiClient.post("/api/v1/attendance/check-out/", {});
-      showToast(t('checkOutSuccess'));
-      await Promise.all([loadTodayRecord(), loadTodayStats(), loadRecords()]);
-    } catch (e: any) {
-      const d = e.response?.data;
-      showToast(d?.detail || d?.message || "Xatolik");
-    } finally { setCheckingOut(false); }
-  };
 
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +117,7 @@ export function AttendancePage() {
       });
       showToast(t('recordAdded'));
       setAddModal(false);
-      setForm({ user: "", date: new Date().toISOString().slice(0, 10), check_in: "", check_out: "", check_in_method: "manual" });
+      setForm({ user: "", date: new Date().toISOString().slice(0, 10), check_in: "", check_out: "", check_in_method: "face_id" });
       await Promise.all([loadRecords(), loadTodayStats()]);
     } catch (e: any) {
       showToast(e.response?.data?.detail || "Qo'shishda xatolik");
@@ -171,7 +139,13 @@ export function AttendancePage() {
 
   const handleExport = async () => {
     try {
-      const r = await apiClient.get<Blob>("/api/v1/attendance/?export_format=csv", { responseType: "blob" });
+      const params: Record<string, any> = {};
+      if (statusF !== "all") params.status     = statusF;
+      if (methodF !== "all") params.method     = methodF;
+      if (dateFrom)          params.date_from  = dateFrom;
+      if (dateTo)            params.date_to    = dateTo;
+      if (search)            params.search     = search;
+      const r = await apiClient.get<Blob>("/api/v1/attendance/", { params: { ...params, export_format: "csv" }, responseType: "blob" });
       const url = URL.createObjectURL(r.data);
       const a = Object.assign(document.createElement("a"), { href: url, download: "attendance.csv" });
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
@@ -179,10 +153,8 @@ export function AttendancePage() {
   };
 
   const resetFilters = () => { setSearch(""); setStatusF("all"); setMethodF("all"); setUserF(""); setDeptF(""); setDateFrom(""); setDateTo(""); setPage(1); };
-  const hasFilters = !!(search || statusF !== "all" || methodF !== "all" || userF || deptF || dateFrom || dateTo);
-  const totalPages = Math.max(1, Math.ceil(total / perPage));
-
-  const myStatus = !todayRecord?.check_in ? "none" : !todayRecord?.check_out ? "in" : "done";
+  const hasFilters   = !!(search || statusF !== "all" || methodF !== "all" || userF || deptF || dateFrom || dateTo);
+  const totalPages   = Math.max(1, Math.ceil(total / perPage));
 
   const statusLabel = {
     on_time: t('onTime'), late: t('arrivedLate'), early_leave: t('earlyLeave'), absent: t('didntCome'),
@@ -207,41 +179,6 @@ export function AttendancePage() {
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-800 dark:bg-indigo-700 text-white text-[13px] font-semibold hover:bg-indigo-900 dark:hover:bg-indigo-600 transition-colors">
             <Plus size={14} />{t('addRecord')}
           </button>
-        </div>
-      </div>
-
-      {/* ── My Status Banner ── */}
-      <div className={`flex items-center justify-between px-4 py-3 rounded-xl mb-4 border flex-wrap gap-2
-        ${myStatus === "none" ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50" :
-          myStatus === "in"   ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/50" :
-                                "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800/50"}`}>
-        <div className={`flex items-center gap-2 text-[13px] font-medium
-          ${myStatus === "none" ? "text-blue-700 dark:text-blue-400" :
-            myStatus === "in"   ? "text-emerald-700 dark:text-emerald-400" :
-                                  "text-purple-700 dark:text-purple-400"}`}>
-          <div className={`w-2 h-2 rounded-full
-            ${myStatus === "in" ? "bg-emerald-500 animate-pulse" :
-              myStatus === "done" ? "bg-purple-500" : "bg-blue-400"}`} />
-          {myStatus === "none" && t('notCheckedIn')}
-          {myStatus === "in"   && `${t('currentlyInOffice')}: ${todayRecord?.check_in ? formatTime(todayRecord.check_in) : "—"}`}
-          {myStatus === "done" && `${todayRecord?.check_in ? formatTime(todayRecord.check_in) : "—"} – ${todayRecord?.check_out ? formatTime(todayRecord.check_out) : "—"} · ${todayRecord?.net_seconds ? formatDuration(todayRecord.net_seconds) : "—"}`}
-        </div>
-        <div className="flex items-center gap-2">
-          {myStatus === "none" && (
-            <button disabled={checkingIn} onClick={handleCheckIn}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-[12px] font-semibold hover:bg-teal-700 disabled:opacity-60 transition-colors">
-              {checkingIn ? <Loader2 size={12} className="animate-spin" /> : <Clock size={12} />}
-              {t('checkInBtn')}
-            </button>
-          )}
-          {myStatus === "in" && (
-            <button disabled={checkingOut} onClick={handleCheckOut}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 text-white text-[12px] font-semibold hover:bg-red-800 disabled:opacity-60 transition-colors">
-              {checkingOut ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />}
-              {t('checkOutBtn')}
-            </button>
-          )}
-          {myStatus === "done" && <span className="text-[12px] font-semibold text-purple-700 dark:text-purple-400">✓ {t('completedToday')}</span>}
         </div>
       </div>
 
@@ -339,7 +276,7 @@ export function AttendancePage() {
                 </td></tr>
               ) : records.length === 0 ? (
                 <tr><td colSpan={8} className="py-16 text-center">
-                  <Users size={36} className="opacity-20 mx-auto mb-3 text-gray-400" />
+                  <Clock size={36} className="opacity-20 mx-auto mb-3 text-gray-400" />
                   <div className="text-[14px] font-medium text-gray-500 dark:text-gray-500">{t('noRecords')}</div>
                   {hasFilters && <div className="text-[12px] text-gray-400 mt-1">{t('tryFilters')}</div>}
                 </td></tr>
@@ -386,7 +323,7 @@ export function AttendancePage() {
 
                   <td className="px-3.5 py-2.5">
                     <div className="flex items-center gap-1.5">
-                      {METHOD_ICON[rec.check_in_method] ?? <PenLine size={13} className="text-gray-400" />}
+                      {METHOD_ICON[rec.check_in_method] ?? <Scan size={13} className="text-indigo-400" />}
                       <span className="text-[12px] text-gray-500 dark:text-gray-400">
                         {METHOD_LABEL[rec.check_in_method] ?? rec.check_in_method}
                       </span>
@@ -500,10 +437,10 @@ export function AttendancePage() {
                 <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{t('method')}</label>
                 <select value={form.check_in_method} onChange={e => setForm({ ...form, check_in_method: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#2D3148] bg-white dark:bg-[#0F1117] text-[13px] text-gray-800 dark:text-gray-200 outline-none">
-                  <option value="manual">Manual</option>
                   <option value="face_id">Face ID</option>
                   <option value="pin">PIN</option>
                   <option value="qr">QR Code</option>
+                  <option value="manual">Manual</option>
                 </select>
               </div>
 
@@ -526,7 +463,7 @@ export function AttendancePage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3 bg-gray-900 dark:bg-gray-800 text-white px-4 py-3 rounded-xl shadow-2xl text-[13px] font-medium max-w-sm animate-in slide-in-from-bottom-2">
+        <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3 bg-gray-900 dark:bg-gray-800 text-white px-4 py-3 rounded-xl shadow-2xl text-[13px] font-medium max-w-sm">
           <span className="flex-1">{toast}</span>
           <button onClick={() => setToast(null)} className="text-gray-400 hover:text-white border-0 bg-transparent cursor-pointer p-0">
             <X size={13} />

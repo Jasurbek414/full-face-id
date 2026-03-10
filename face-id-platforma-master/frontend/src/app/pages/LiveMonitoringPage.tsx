@@ -1,58 +1,83 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { Search, RefreshCw, Users, UserCheck, UserX, MapPin, Clock, Wifi } from "lucide-react";
 import { UserAvatar } from "../components/UserAvatar";
 import { apiClient } from "../api/client";
-import { useLiveAttendance } from "../hooks/useAttendance";
 import { useAttendanceWebSocket } from "../hooks/useWebSocket";
 import { formatTime } from "../utils/time";
 import { useLanguage } from "../context/LanguageContext";
-import { useTheme } from "../context/ThemeContext";
 
 type FilterType = "all" | "inside" | "outside";
+
+interface TodayStats {
+  total_employees: number;
+  present: number;
+  on_site: number;
+  absent: number;
+}
 
 export function LiveMonitoringPage() {
   const navigate   = useNavigate();
   const { t }      = useLanguage();
-  const { isDark } = useTheme();
 
-  const { data: liveData, loading, refetch } = useLiveAttendance();
-  const [search, setSearch]       = useState("");
-  const [filter, setFilter]       = useState<FilterType>("all");
+  const [records, setRecords]       = useState<any[]>([]);
+  const [todayStats, setTodayStats] = useState<TodayStats | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [filter, setFilter]         = useState<FilterType>("all");
   const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [spinning, setSpinning]   = useState(false);
-  const [absentCount, setAbsentCount] = useState<number>(0);
+  const [spinning, setSpinning]     = useState(false);
+
+  const fetchData = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const [attRes, statsRes] = await Promise.all([
+        apiClient.get(`/api/v1/attendance/?date_from=${today}&date_to=${today}`),
+        apiClient.get("/api/v1/attendance/today-stats/"),
+      ]);
+      setRecords(attRes.data.results ?? attRes.data ?? []);
+      setTodayStats(statsRes.data);
+    } catch {
+      setRecords([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   useAttendanceWebSocket((msg) => {
     if (msg.type === "attendance.check_in" || msg.type === "attendance.check_out") {
-      refetch();
+      fetchData();
       setLastUpdate(new Date());
     }
   });
 
-  useEffect(() => {
-    apiClient.get("/api/v1/attendance/today-stats/")
-      .then(r => setAbsentCount(r.data.absent || 0))
-      .catch(() => {});
-  }, [liveData]);
-
   const handleRefresh = async () => {
     setSpinning(true);
-    await refetch();
+    await fetchData();
     setLastUpdate(new Date());
     setTimeout(() => setSpinning(false), 600);
   };
 
-  const employees = liveData.map((emp: any) => ({
-    id:         emp.id,
-    name:       emp.user_name,
-    department: emp.department_name ?? (typeof emp.department === "object" ? emp.department?.name : emp.department) ?? "—",
-    role:       typeof emp.system_role === "object" ? emp.system_role?.name : emp.system_role || "Employee",
-    avatar:     emp.user_photo || "",
-    status:     ((emp.check_in && !emp.check_out) ? "inside" : "outside") as FilterType,
-    checkIn:    emp.check_in  ? formatTime(emp.check_in)  : "",
-    checkOut:   emp.check_out ? formatTime(emp.check_out) : null,
-  }));
+  // Map attendance records to employee cards
+  const employees = records
+    .filter(r => r.check_in) // only those who checked in
+    .map((rec: any) => ({
+      id:         rec.id,
+      userId:     rec.user,
+      name:       rec.user_name,
+      department: rec.department_name ?? "—",
+      avatar:     rec.user_photo || "",
+      status:     (rec.check_in && !rec.check_out ? "inside" : "outside") as FilterType,
+      checkIn:    rec.check_in  ? formatTime(rec.check_in)  : "",
+      checkOut:   rec.check_out ? formatTime(rec.check_out) : null,
+      attStatus:  rec.status,
+    }));
 
   const filtered = employees.filter(emp =>
     (emp.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -60,14 +85,17 @@ export function LiveMonitoringPage() {
     (filter === "all" || emp.status === filter)
   );
 
-  const insideCount  = employees.filter(e => e.status === "inside").length;
-  const outsideCount = employees.filter(e => e.status === "outside").length;
+  // Stat counts from server stats (accurate)
+  const totalEmployees = todayStats?.total_employees ?? employees.length;
+  const insideCount    = todayStats?.on_site ?? employees.filter(e => e.status === "inside").length;
+  const outsideCount   = todayStats != null ? (todayStats.present - todayStats.on_site) : employees.filter(e => e.status === "outside").length;
+  const absentCount    = todayStats?.absent ?? 0;
 
   const statCards = [
-    { label: t('totalEmployees'), value: employees.length, icon: <Users size={18} />, cls: "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300" },
-    { label: t('insideOffice'),   value: insideCount,       icon: <UserCheck size={18} />, cls: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" },
-    { label: t('outsideAway'),    value: outsideCount,      icon: <Users size={18} />,     cls: "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" },
-    { label: t('absentToday'),    value: absentCount,       icon: <UserX size={18} />,     cls: "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400" },
+    { label: t('totalEmployees'), value: totalEmployees, icon: <Users size={18} />,     cls: "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300" },
+    { label: t('insideOffice'),   value: insideCount,    icon: <UserCheck size={18} />, cls: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" },
+    { label: t('outsideAway'),    value: Math.max(0, outsideCount), icon: <Users size={18} />, cls: "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" },
+    { label: t('absentToday'),    value: absentCount,    icon: <UserX size={18} />,     cls: "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400" },
   ];
 
   const filterTabs: { key: FilterType; label: string }[] = [
@@ -75,6 +103,13 @@ export function LiveMonitoringPage() {
     { key: "inside",  label: t('insideFilter') },
     { key: "outside", label: t('outsideFilter') },
   ];
+
+  const attStatusColors: Record<string, string> = {
+    on_time:     "text-emerald-600 dark:text-emerald-400",
+    late:        "text-orange-500",
+    absent:      "text-red-500",
+    early_leave: "text-yellow-500",
+  };
 
   return (
     <div className="font-sans">
@@ -175,7 +210,7 @@ export function LiveMonitoringPage() {
           {filtered.map(emp => (
             <div
               key={emp.id}
-              onClick={() => navigate(`/app/employees/${emp.id}`)}
+              onClick={() => navigate(`/app/employees/${emp.userId}`)}
               className={`relative bg-white dark:bg-[#1A1D2E] rounded-xl p-5 border shadow-sm cursor-pointer overflow-hidden
                 transition-all hover:-translate-y-1 hover:shadow-md
                 ${emp.status === "inside"
@@ -191,7 +226,11 @@ export function LiveMonitoringPage() {
 
                 <div className="mt-2.5">
                   <div className="text-[14px] font-bold text-gray-900 dark:text-gray-100">{emp.name}</div>
-                  <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{emp.role}</div>
+                  <div className={`text-[11px] mt-0.5 font-medium ${attStatusColors[emp.attStatus] ?? "text-gray-400 dark:text-gray-500"}`}>
+                    {emp.attStatus === "on_time"     ? t('onTime') :
+                     emp.attStatus === "late"        ? t('late') :
+                     emp.attStatus === "early_leave" ? t('earlyLeave') : emp.attStatus}
+                  </div>
                 </div>
 
                 <span className={`mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold
@@ -218,8 +257,6 @@ export function LiveMonitoringPage() {
           ))}
         </div>
       )}
-
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

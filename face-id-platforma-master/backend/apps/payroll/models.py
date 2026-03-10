@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from apps.core.models import SoftDeleteModel
 
+
 class SalaryConfig(SoftDeleteModel):
     SALARY_TYPE_CHOICES = (
         ('hourly', 'Hourly'),
@@ -17,9 +18,12 @@ class SalaryConfig(SoftDeleteModel):
     night_rate = models.DecimalField(max_digits=4, decimal_places=2, default=2.0)
     weekend_rate = models.DecimalField(max_digits=4, decimal_places=2, default=2.0)
     holiday_rate = models.DecimalField(max_digits=4, decimal_places=2, default=3.0)
+    tax_percent = models.DecimalField(max_digits=5, decimal_places=2, default=12.0)
+    inps_percent = models.DecimalField(max_digits=5, decimal_places=2, default=1.0)
 
     class Meta:
         app_label = 'payroll'
+
 
 class PayrollRecord(SoftDeleteModel):
     STATUS_CHOICES = (
@@ -30,7 +34,7 @@ class PayrollRecord(SoftDeleteModel):
 
     company = models.ForeignKey('companies.Company', on_delete=models.CASCADE, related_name='payroll_records')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payroll_records')
-    month = models.DateField()  # Typically stored as the first day of the month
+    month = models.DateField()
     work_days = models.PositiveIntegerField(default=0)
     work_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     overtime_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -38,9 +42,12 @@ class PayrollRecord(SoftDeleteModel):
     base_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     overtime_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     night_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    inps_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     net_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    notes = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -50,3 +57,29 @@ class PayrollRecord(SoftDeleteModel):
 
     def __str__(self):
         return f"Payroll {self.user.get_full_name()} - {self.month.strftime('%Y-%m')}"
+
+
+class PayrollDeduction(SoftDeleteModel):
+    DEDUCTION_TYPES = (
+        ('tax', "Daromad solig'i"),
+        ('inps', 'INPS'),
+        ('pension', 'Pensiya jamg\'armasi'),
+        ('loan', 'Kredit'),
+        ('advance', 'Avans'),
+        ('other', 'Boshqa'),
+    )
+
+    payroll_record = models.ForeignKey(
+        PayrollRecord, on_delete=models.CASCADE, related_name='deduction_items'
+    )
+    name = models.CharField(max_length=200)
+    deduction_type = models.CharField(max_length=20, choices=DEDUCTION_TYPES, default='other')
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    note = models.TextField(blank=True, default='')
+
+    class Meta:
+        app_label = 'payroll'
+
+    def __str__(self):
+        return f"{self.name} - {self.amount}"

@@ -37,6 +37,7 @@ class User(AbstractBaseUser, PermissionsMixin, models.Model):
     must_change_pw = models.BooleanField(default=False)
     # Tenant relation
     company = models.ForeignKey('companies.Company', null=True, blank=True, on_delete=models.SET_NULL, related_name='users')
+    department = models.ForeignKey('companies.Department', null=True, blank=True, on_delete=models.SET_NULL, related_name='employees')
     role = models.ForeignKey('roles.CustomRole', null=True, blank=True, on_delete=models.SET_NULL, related_name='users')
 
     objects = UserManager()

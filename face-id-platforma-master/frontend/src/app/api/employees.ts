@@ -12,9 +12,9 @@ export const employeesAPI = {
     deactivate: (id: string) =>
         apiClient.post(`/api/v1/employees/${id}/deactivate/`),
     faceEnroll: (id: string, base64photo: string) =>
-        apiClient.post(`/api/v1/employees/${id}/face/`, { photo: base64photo }),
+        apiClient.post(`/api/v1/face/employees/${id}/face/`, { photo: base64photo }),
     faceDelete: (id: string) =>
-        apiClient.delete(`/api/v1/employees/${id}/face/`),
+        apiClient.delete(`/api/v1/face/employees/${id}/face/`),
     attendanceHistory: (id: string, params?: object) =>
         apiClient.get(`/api/v1/employees/${id}/attendance/`, { params }),
 };

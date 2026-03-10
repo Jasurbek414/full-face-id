@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   Mail,
@@ -14,40 +14,48 @@ import {
   Scan,
   X,
   Trash2,
+  Check,
 } from "lucide-react";
-import { UserAvatar } from "../components/UserAvatar";
 import { StatusBadge } from "../components/StatusBadge";
 import { useEmployees } from "../hooks/useEmployees";
+import { employeesAPI } from "../api/employees";
 import { apiClient } from "../api/client";
 import { useLanguage } from "../context/LanguageContext";
-import { useTheme } from "../context/ThemeContext";
 
 import { EditProfileModal } from "../components/EditProfileModal";
 
-const STATUS_COLOR: Record<string, string> = {
-  "on_time": "text-green-500 bg-green-50 dark:bg-green-900/20",
-  "late": "text-orange-500 bg-orange-50 dark:bg-orange-900/20",
-  "absent": "text-red-500 bg-red-50 dark:bg-red-900/20",
-  "off": "text-gray-400 bg-gray-50 dark:bg-gray-800/40",
-};
-
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function getMonthGrid(year: number, month: number) {
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // Monday=0 ... Sunday=6
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const cells: Array<{ day: number | null }> = [];
+  for (let i = 0; i < startOffset; i++) cells.push({ day: null });
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d });
+  return cells;
+}
 
 export function EmployeeProfilePage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { get, enrollFace, deleteFace, getAttendance, loading: actionLoading } = useEmployees();
   const { t } = useLanguage();
-  const { theme } = useTheme();
 
   const [emp, setEmp] = useState<any>(null);
   const [faceEnrolled, setFaceEnrolled] = useState(false);
-  const [activeTab, setActiveTab] = useState<"calendar" | "records">("calendar");
   const [empRecords, setEmpRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
-  const fetchProfile = async () => {
+  const showToast = useCallback((msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const fetchProfile = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
@@ -62,11 +70,11 @@ export function EmployeeProfilePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, get, getAttendance]);
 
   useEffect(() => {
     fetchProfile();
-  }, [id]);
+  }, [fetchProfile]);
 
   const handleFaceEnroll = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0] || !id) return;
@@ -77,9 +85,9 @@ export function EmployeeProfilePage() {
       try {
         await enrollFace(id, base64String);
         setFaceEnrolled(true);
-        alert(t('faceSaved'));
+        showToast(t('faceSaved'));
       } catch (err: any) {
-        alert(t('errorOccurred') + ": " + (err.response?.data?.error || err.message));
+        showToast(t('errorOccurred') + ": " + (err.response?.data?.error || err.message), false);
       }
     };
     reader.readAsDataURL(file);
@@ -90,20 +98,32 @@ export function EmployeeProfilePage() {
     try {
       await deleteFace(id);
       setFaceEnrolled(false);
+      showToast(t('saved'));
     } catch (err: any) {
-      alert(t('errorOccurred') + ": " + err.message);
+      showToast(t('errorOccurred') + ": " + err.message, false);
     }
   };
 
   const handleUpdateProfile = async (formData: any) => {
     if (!id) return;
     try {
-      await apiClient.put(`/api/v1/employees/${id}/`, formData);
-      alert(t('profileUpdated'));
+      await apiClient.patch(`/api/v1/employees/${id}/`, formData);
+      showToast(t('profileUpdated'));
       fetchProfile();
     } catch (err: any) {
-      alert(t('errorOccurred') + ": " + (err.response?.data?.detail || err.message));
+      showToast(t('errorOccurred') + ": " + (err.response?.data?.detail || err.message), false);
       throw err;
+    }
+  };
+
+  const handleDeactivate = async () => {
+    if (!id || !window.confirm(t('confirmDeactivate'))) return;
+    try {
+      await employeesAPI.deactivate(id);
+      showToast(t('saved'));
+      fetchProfile();
+    } catch (err: any) {
+      showToast(t('errorOccurred') + ": " + (err.response?.data?.detail || err.message), false);
     }
   };
 
@@ -121,10 +141,37 @@ export function EmployeeProfilePage() {
   const presentCount = empRecords.filter((r) => r.status === "on_time").length;
   const lateCount = empRecords.filter((r) => r.status === "late").length;
   const absentCount = empRecords.filter((r) => r.status === "absent").length;
-  const offCount = 0; 
+  const offCount = empRecords.filter((r) => r.status === "off").length;
+  const totalTracked = presentCount + lateCount + absentCount;
+  const attendanceRate = totalTracked > 0
+    ? Math.round(((presentCount + lateCount) / totalTracked) * 100)
+    : 0;
 
   const deptName = typeof emp.department === 'object' ? emp.department?.name : emp.department ?? 'General';
   const roleName = typeof emp.system_role === 'object' ? emp.system_role?.name : emp.system_role ?? 'User';
+
+  // Build heatmap for current month
+  const now = new Date();
+  const monthYear = now.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const monthGrid = getMonthGrid(now.getFullYear(), now.getMonth());
+
+  // Map date → status from records
+  const statusByDay: Record<number, string> = {};
+  empRecords.forEach((r) => {
+    const d = new Date(r.date);
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
+      statusByDay[d.getDate()] = r.status;
+    }
+  });
+
+  const dayCellColor = (day: number) => {
+    const s = statusByDay[day];
+    if (!s) return "bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700/50 text-slate-400 dark:text-slate-500";
+    if (s === "on_time") return "bg-green-100 dark:bg-green-900/40 border-green-200 dark:border-green-800/40 text-green-700 dark:text-green-400";
+    if (s === "late") return "bg-orange-100 dark:bg-orange-900/40 border-orange-200 dark:border-orange-800/40 text-orange-700 dark:text-orange-400";
+    if (s === "absent") return "bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-400";
+    return "bg-slate-100 dark:bg-slate-700/40 border-slate-200 dark:border-slate-600/40 text-slate-500 dark:text-slate-400";
+  };
 
   return (
     <div className="space-y-6">
@@ -149,19 +196,10 @@ export function EmployeeProfilePage() {
             <p className="text-sm text-slate-500 dark:text-slate-400">{t('profileSubtitle')}</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              if (window.confirm(t('confirmDeactivate'))) {
-                apiClient.put(`/api/v1/employees/${id}/`, { is_active: false })
-                  .then(() => {
-                    alert(t('saved'));
-                    fetchProfile();
-                  })
-                  .catch((err: any) => alert(t('errorOccurred') + ": " + (err.response?.data?.detail || err.message)));
-              }
-            }}
+            onClick={handleDeactivate}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-all"
           >
             <Trash2 size={16} />
@@ -188,14 +226,14 @@ export function EmployeeProfilePage() {
               <div className="relative inline-block group">
                 <div className="w-24 h-24 rounded-full border-4 border-white dark:border-slate-800 overflow-hidden shadow-lg mx-auto bg-slate-100 dark:bg-slate-700">
                   <img
-                    src={emp.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.first_name + " " + emp.last_name)}&background=6366f1&color=fff&size=128`}
+                    src={emp.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.first_name + " " + emp.last_name)}&background=6366f1&color=fff&size=128`}
                     alt={emp.first_name}
                     className="w-full h-full object-cover"
                   />
                 </div>
                 <div className={`absolute bottom-1 right-1 w-5 h-5 rounded-full border-2 border-white dark:border-slate-800 shadow-sm ${emp.is_active ? 'bg-green-500' : 'bg-slate-400'}`}></div>
               </div>
-              
+
               <div className="mt-4">
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">{emp.first_name} {emp.last_name}</h2>
                 <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">{roleName}</p>
@@ -253,8 +291,8 @@ export function EmployeeProfilePage() {
                 onClick={() => document.getElementById('face-upload')?.click()}
                 disabled={actionLoading}
                 className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm ${
-                  faceEnrolled 
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50 hover:bg-slate-50 dark:hover:bg-slate-600' 
+                  faceEnrolled
+                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50 hover:bg-slate-50 dark:hover:bg-slate-600'
                   : 'bg-indigo-600 text-white border-transparent hover:bg-indigo-700 active:transform active:scale-95'
                 }`}
               >
@@ -326,7 +364,7 @@ export function EmployeeProfilePage() {
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-none">March 2026 Attendance</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-none">{monthYear}</h3>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium">{t('attendanceHeatmap')}</p>
               </div>
               <div className="flex flex-wrap gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -351,14 +389,18 @@ export function EmployeeProfilePage() {
             </div>
 
             <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-              {Array(31).fill(null).map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-square rounded-lg sm:rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 flex items-center justify-center text-[11px] font-bold text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-default"
-                >
-                  {i + 1}
-                </div>
-              ))}
+              {monthGrid.map((cell, i) =>
+                cell.day === null ? (
+                  <div key={`empty-${i}`} />
+                ) : (
+                  <div
+                    key={cell.day}
+                    className={`aspect-square rounded-lg sm:rounded-xl border flex items-center justify-center text-[11px] font-bold hover:opacity-80 transition-colors cursor-default ${dayCellColor(cell.day)}`}
+                  >
+                    {cell.day}
+                  </div>
+                )
+              )}
             </div>
           </div>
 
@@ -368,10 +410,10 @@ export function EmployeeProfilePage() {
               <h3 className="text-base font-bold text-slate-900 dark:text-white">{t('recentRecords')}</h3>
               <div className="flex items-center gap-2 px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-full border border-green-100 dark:border-green-900/30">
                 <TrendingUp size={14} className="text-green-600 dark:text-green-400" />
-                <span className="text-[11px] font-bold text-green-700 dark:text-green-400">98.2% {t('attendanceRate')}</span>
+                <span className="text-[11px] font-bold text-green-700 dark:text-green-400">{attendanceRate}% {t('attendanceRate')}</span>
               </div>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -385,7 +427,7 @@ export function EmployeeProfilePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                  {empRecords.length > 0 ? empRecords.map((r, i) => (
+                  {empRecords.length > 0 ? empRecords.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-bold text-slate-700 dark:text-slate-200">
@@ -394,12 +436,12 @@ export function EmployeeProfilePage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                          {r.checkIn ? new Date(r.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
+                          {r.check_in || "—"}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                          {r.checkOut ? new Date(r.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
+                          {r.check_out || "—"}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -433,6 +475,18 @@ export function EmployeeProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl text-[13px] font-medium max-w-sm
+          ${toast.ok ? "bg-emerald-700 text-white" : "bg-red-700 text-white"}`}>
+          {toast.ok ? <Check size={14} /> : <X size={14} />}
+          <span className="flex-1">{toast.msg}</span>
+          <button onClick={() => setToast(null)} className="text-white/70 hover:text-white border-0 bg-transparent cursor-pointer p-0">
+            <X size={13} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

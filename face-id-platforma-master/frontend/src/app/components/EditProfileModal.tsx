@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { X, User, Phone, Building2, Shield, Mail } from "lucide-react";
+import { X, User, Phone, Mail } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext";
+import { apiClient } from "../api/client";
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -16,10 +17,17 @@ export function EditProfileModal({ isOpen, onClose, employee, onSave }: EditProf
     last_name: "",
     phone: "",
     email: "",
-    department: "",
-    system_role: "",
+    department_id: "" as string | null,
   });
+  const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    apiClient.get('/api/v1/companies/departments/').then((res: any) => {
+      setDepartments(res.data?.results ?? res.data ?? []);
+    }).catch(() => {});
+  }, [isOpen]);
 
   useEffect(() => {
     if (employee && isOpen) {
@@ -28,8 +36,7 @@ export function EditProfileModal({ isOpen, onClose, employee, onSave }: EditProf
         last_name: employee.last_name ?? "",
         phone: employee.phone ?? "",
         email: employee.email ?? "",
-        department: typeof employee.department === 'object' ? (employee.department?.name ?? "") : (employee.department ?? ""),
-        system_role: typeof employee.system_role === 'object' ? (employee.system_role?.name ?? "") : (employee.system_role ?? ""),
+        department_id: typeof employee.department === 'object' ? (employee.department?.id ?? null) : null,
       });
     }
   }, [employee, isOpen]);
@@ -40,7 +47,14 @@ export function EditProfileModal({ isOpen, onClose, employee, onSave }: EditProf
     e.preventDefault();
     setLoading(true);
     try {
-      await onSave(formData);
+      const payload: any = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        phone: formData.phone,
+        email: formData.email,
+      };
+      if (formData.department_id) payload.department_id = formData.department_id;
+      await onSave(payload);
       onClose();
     } catch (err) {
       console.error(err);
@@ -129,35 +143,20 @@ export function EditProfileModal({ isOpen, onClose, employee, onSave }: EditProf
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">
-                {t('department')}
-              </label>
-              <div className="relative group">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                <input
-                  type="text"
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">
-                {t('role')}
-              </label>
-              <div className="relative group">
-                <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                <input
-                  type="text"
-                  value={formData.system_role}
-                  onChange={(e) => setFormData({ ...formData, system_role: e.target.value })}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-              </div>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">
+              {t('department')}
+            </label>
+            <select
+              value={formData.department_id ?? ""}
+              onChange={(e) => setFormData({ ...formData, department_id: e.target.value || null })}
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+            >
+              <option value="">{t('noDepartment')}</option>
+              {departments.map((d: any) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Actions */}

@@ -22,3 +22,9 @@ export const companyUsersAPI = {
 export const rolesAPI = {
     list: () => apiClient.get('/api/v1/roles/roles/'),
 };
+
+export const faceAPI = {
+    enrolledFaces: () => apiClient.get('/api/v1/face/enrolled/'),
+    deleteEnrolledFace: (userId: string) => apiClient.delete(`/api/v1/face/employees/${userId}/face/`),
+    attempts: (params?: object) => apiClient.get('/api/v1/face/attempts/', { params }),
+};

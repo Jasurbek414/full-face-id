@@ -26,8 +26,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         return data
 
 class LeaveBalanceSerializer(serializers.Serializer):
-    leave_type_id = serializers.UUIDField(source='id')
-    leave_type_name = serializers.CharField(source='name')
-    max_days = serializers.IntegerField(source='max_days_per_year')
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    max_days_per_year = serializers.IntegerField()
     used_days = serializers.IntegerField()
     remaining_days = serializers.IntegerField()
